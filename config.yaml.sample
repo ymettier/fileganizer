@@ -1,0 +1,44 @@
+---
+# ExtractTextCommand describes the command to extract text from a file (like a pdf file). The special string "FILENAME" will be replaced with the real file name.
+# Examples :
+#   ExtractTextCommand: ["pdftotext", "-nopgbrk", "-enc", "UTF-8", "FILENAME", "-"]
+#   ExtractTextCommand: ["pdf2txt", "FILENAME"]
+ExtractTextCommand: ["pdftotext", "-nopgbrk", "-enc", "UTF-8", "FILENAME", "-"]
+
+# These variables will be available as go-template vars for output.
+# Example : {{ .env.DEST }}
+env:
+  - DEST
+
+# This template will be concatenated to output template.
+# It allows to pre-define templates.
+commonTemplate: ""
+
+# These variables are use to
+# 1. generate grokPatterns. Example :  
+#      MONTHSFRENCHLOWERCASE: "(janvier|février|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|décembre"
+# 2. in a go-template function "MonthIndex" to convert the given string into a string with the number of the month.
+#      Example : "{{ MonthIndex .grok.month }}" will convert to "02" if .grok.month is "février".
+months:
+  MONTHSFRENCHLOWERCASE: ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "aout", "septembre", "octobre", "novembre", "décembre"]
+
+grokPatterns:
+  NUMBER: '[0-9]+'
+  YEAR: "(?:\\d\\d){1,2}"
+  MONTHNUM2: "0[1-9]|1[0-2]"
+  MONTHDAY: "(?:0[1-9])|(?:[12][0-9])|(?:3[01])|[1-9]"
+
+fileDescriptions:
+  myMobile:
+    patterns:
+      - "(?s)Forfait mobile.*ligne : %{NUMBER:numLigne}"
+      - "Identifiant : %{NUMBER:identifiant}"
+# Output is go-template.
+# It may use these fonctions :
+# - ToUpper (see strings.ToUpper)
+# - ToLower (see strings.ToLower)
+# - MonthIndex (see above)
+# - NowYYYY (returns now with layout YYYY)
+# - NowYYYYMMDD (returns now with layout YYYYMMDD)
+# - NowYYYYMMDD_HHMMSS (returns now with layout YYYYMMDD_HHMMSS)
+    output : "mv {{ .filename }} {{ .env.DEST }}/invoice_{{ .grok.identifiant }}_{{ .grok.numLigne }}_{{ .grok.year }}-{{ MonthIndex .grok.month }}-{{ .grok.day }}.pdf"
