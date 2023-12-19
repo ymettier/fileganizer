@@ -4,7 +4,7 @@
 package main
 
 import (
-	"fileganizer/cfg"
+	"fileganizer/config"
 	"fileganizer/grok"
 	"fileganizer/logger"
 	"fileganizer/output"
@@ -28,7 +28,7 @@ var (
 func main() {
 	l := logger.Get()
 
-	cfg, err := cfg.New(Version)
+	cfg, err := config.New(Version)
 	if err != nil {
 		os.Exit(1)
 	}
@@ -41,8 +41,6 @@ func main() {
 		fmt.Printf("%v\n", txt)
 		os.Exit(0)
 	}
-	//	fmt.Printf("Config %v\n", cfg)
-	//	fmt.Printf("Patterns %v\n", cfg.FileDescriptions)
 	g := grok.New(cfg.GrokPatterns)
 	o := output.New(cfg.CommonTemplate, cfg.Months)
 	for _, fd := range cfg.FileDescriptions {
@@ -53,7 +51,7 @@ func main() {
 		if r == nil {
 			continue
 		}
-		values := map[string]interface{}{
+		values := map[string]any{
 			"env":      cfg.EnvVars,
 			"grok":     r,
 			"filename": cfg.InputFile,
@@ -64,14 +62,13 @@ func main() {
 		}
 		if cfg.NoDryRun {
 			run, err := exec.Command("bash", "-c", outputResult).Output()
-			fmt.Printf("%s", string(run[:]))
+			fmt.Printf("%s", string(run))
 			if err != nil {
-				l.Fatal("Run output command", zap.String("command output", string(run[:])), zap.Error(err))
+				l.Fatal("Run output command", zap.String("command output", string(run)), zap.Error(err))
 				os.Exit(1)
 			}
 		} else {
 			fmt.Printf("%s", outputResult)
-
 		}
 	}
 }

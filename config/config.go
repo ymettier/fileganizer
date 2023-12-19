@@ -1,7 +1,7 @@
 // Copyright 2023 The Fileganizer Authors. All rights reserved.
 // SPDX-License-Identifier: MIT
 
-package cfg
+package config
 
 import (
 	"fileganizer/logger"
@@ -18,7 +18,7 @@ import (
 
 type VersionFlag bool
 
-func printVersion(version string) (string, error) {
+func printVersion(version string) string {
 	output := fmt.Sprintf("%-15s: %s\n", "Version", version)
 
 	// Get and print additionnal build info
@@ -28,7 +28,7 @@ func printVersion(version string) (string, error) {
 
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
-		return output, nil
+		return output
 	}
 
 	for _, kv := range info.Settings {
@@ -49,11 +49,11 @@ func printVersion(version string) (string, error) {
 	output += fmt.Sprintf("%-15s: %v\n", "Dirty Build", dirtyBuild)
 	output += fmt.Sprintf("%-15s: %s\n", "Last Commit", lastCommit)
 	output += fmt.Sprintf("%-15s: %s\n", "Go Version", info.GoVersion)
-	return output, nil
+	return output
 }
 
 func (v VersionFlag) BeforeReset(version string) error {
-	output, _ := printVersion(version)
+	output := printVersion(version)
 	fmt.Printf("%s", output)
 	os.Exit(0)
 	return nil
@@ -62,8 +62,8 @@ func (v VersionFlag) BeforeReset(version string) error {
 type CLI struct {
 	InputFile  string      `name:"file" short:"f" required:"" help:"File to scan"`
 	ConfigFile string      `name:"config" short:"c" required:"" help:"Configuration file"`
-	TextOutput bool        `name:"text-output" short:"t" default:false optional:"" help:"Show extracted text"`
-	NoDryRun   bool        `name:"run" short:"r" default:false optional:"" help:"No Dry run with output of the command. Really run it !"`
+	TextOutput bool        `name:"text-output" short:"t" default:"false" optional:"" help:"Show extracted text"`
+	NoDryRun   bool        `name:"run" short:"r" default:"false" optional:"" help:"No Dry run with output of the command. Really run it !"`
 	Version    VersionFlag `name:"version" short:"V"  help:"Show version info"`
 }
 
@@ -87,7 +87,6 @@ type Config struct {
 
 func New(version string) (Config, error) {
 	var cli CLI
-	//l := logger.Get()
 	kong.Parse(&cli, kong.Bind(version))
 	var cfg Config
 	cfg.InputFile = cli.InputFile
@@ -103,7 +102,7 @@ func New(version string) (Config, error) {
 }
 
 func (c *Config) readConfig(filename string) error {
-	var data map[string]interface{}
+	var data map[string]any
 	l := logger.Get()
 	yamlFile, err := os.ReadFile(filename)
 	if err != nil {
@@ -127,7 +126,10 @@ func (c *Config) readConfig(filename string) error {
 	// commonTemplate: ""
 	//
 	// months:
-	//   MONTHSFRENCH: ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "aout", "septembre", "octobre", "novembre", "décembre"]
+	//   MONTHSFRENCH: [
+	//     "janvier", "février", "mars", "avril", "mai", "juin",
+	//     "juillet", "aout", "septembre", "octobre", "novembre", "décembre"
+	//    ]
 	//
 	// grokPatterns:
 	//   YEAR: "(?:\d\d){1,2}"
@@ -149,13 +151,13 @@ func (c *Config) readConfig(filename string) error {
 
 	// parse ExtractTextCommand
 	c.ExtractTextCommand = make([]string, 0)
-	for _, e := range data["ExtractTextCommand"].([]interface{}) {
+	for _, e := range data["ExtractTextCommand"].([]any) {
 		c.ExtractTextCommand = append(c.ExtractTextCommand, e.(string))
 	}
 
 	// parse env
 	c.EnvVars = make(map[string]string)
-	for _, e := range data["env"].([]interface{}) {
+	for _, e := range data["env"].([]any) {
 		val, ok := os.LookupEnv(e.(string))
 		if !ok {
 			l.Fatal("Environment variable (from configuration file) is not set", zap.String("name", e.(string)))
@@ -168,17 +170,18 @@ func (c *Config) readConfig(filename string) error {
 	c.CommonTemplate = data["commonTemplate"].(string)
 
 	// parse months
+	const nbMonths = 12
 	c.Months = make(map[string][]string)
-	for k, v := range data["months"].(map[string]interface{}) {
-		c.Months[k] = make([]string, 0, 12)
-		for _, m := range v.([]interface{}) {
+	for k, v := range data["months"].(map[string]any) {
+		c.Months[k] = make([]string, 0, nbMonths)
+		for _, m := range v.([]any) {
 			c.Months[k] = append(c.Months[k], m.(string))
 		}
 	}
 
 	// parse grokPatterns
 	c.GrokPatterns = make(map[string]string)
-	for k, v := range data["grokPatterns"].(map[string]interface{}) {
+	for k, v := range data["grokPatterns"].(map[string]any) {
 		c.GrokPatterns[k] = v.(string)
 	}
 	// append months patterns to GrokPatterns
@@ -188,21 +191,16 @@ func (c *Config) readConfig(filename string) error {
 
 	// parse fileDescriptions
 	c.FileDescriptions = make([]FileDescription, 0)
-	for k, v := range data["fileDescriptions"].(map[string]interface{}) {
+	for k, v := range data["fileDescriptions"].(map[string]any) {
 		var d FileDescription
 		d.Name = k
 		d.Patterns = make([]string, 0)
-		fd := v.(map[string]interface{})
-		for _, p := range fd["patterns"].([]interface{}) {
+		fd := v.(map[string]any)
+		for _, p := range fd["patterns"].([]any) {
 			d.Patterns = append(d.Patterns, p.(string))
 		}
 		d.Output = fd["output"].(string)
 		c.FileDescriptions = append(c.FileDescriptions, d)
 	}
 	return nil
-}
-
-func main() {
-	cfg, _ := New("")
-	fmt.Printf("%v\n", cfg)
 }
