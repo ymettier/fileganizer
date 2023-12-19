@@ -37,19 +37,19 @@ func (o Output) MonthIndex(month string) string {
 	return month
 }
 
-func (o Output) FromTemplate(tmpl string, vars map[string]interface{}) (string, error) {
+func (o Output) FromTemplate(tmpl string, vars map[string]any) (string, error) {
 	l := logger.Get()
 	funcMap := template.FuncMap{
 		"ToUpper":            strings.ToUpper,
 		"ToLower":            strings.ToLower,
-		"MonthIndex":         func(m string) string { return o.MonthIndex(m) },
+		"MonthIndex":         func(m string) string { return o.MonthIndex(m) }, //nolint:gocritic
 		"NowYYYY":            func() string { return time.Now().Format("2006") },
 		"NowYYYYMMDD":        func() string { return time.Now().Format("20060102") },
 		"NowYYYYMMDD_HHMMSS": func() string { return time.Now().Format("20060102_030405") },
 	}
 	fulltemplate := tmpl
 	if len(o.CommonTemplate) > 0 {
-		fulltemplate = strings.Join([]string{o.CommonTemplate, tmpl}, "\n")
+		fulltemplate = strings.Join(append([]string{o.CommonTemplate}, tmpl), "\n")
 	}
 
 	mytemplate := template.Must(template.New("main").Funcs(funcMap).Parse(fulltemplate))
@@ -62,8 +62,4 @@ func (o Output) FromTemplate(tmpl string, vars map[string]interface{}) (string, 
 	}
 
 	return doc.String(), nil
-}
-
-func main() {
-	fmt.Println("vim-go")
 }

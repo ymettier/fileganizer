@@ -5,7 +5,6 @@ package grok
 
 import (
 	"fileganizer/logger"
-	"fmt"
 
 	"github.com/logrusorgru/grokky"
 	"go.uber.org/zap"
@@ -44,7 +43,7 @@ func (g *Grok) ParseAll(grokPatterns []string, text string) (map[string]string, 
 	return result, nil
 }
 
-func (g *Grok) Parse(grokPattern string, text string) (map[string]string, error) {
+func (g *Grok) Parse(grokPattern, text string) (map[string]string, error) {
 	l := logger.Get()
 	l.Debug("Testing pattern", zap.String("pattern", grokPattern), zap.String("text", text))
 	p, err := g.Host.Compile(grokPattern)
@@ -55,8 +54,4 @@ func (g *Grok) Parse(grokPattern string, text string) (map[string]string, error)
 	result := p.Parse(text)
 
 	return result, nil
-}
-
-func main() {
-	fmt.Println("vim-go")
 }

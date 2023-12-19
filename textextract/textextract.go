@@ -26,7 +26,7 @@ func TextExtract(filename string, command []string) (string, error) {
 		}
 	}
 	l.Debug("ExtractTextCommand", zap.String("command", command[0]))
-	source, err := exec.Command(command[0], args...).Output()
+	source, err := exec.Command(command[0], args...).Output() //nolint:gosec
 	if err != nil {
 		l.Fatal("ExtractTextCommand failed", zap.Error(err))
 		return "", err
