@@ -1,5 +1,5 @@
 ![Lint Status](https://github.com/ymettier/fileganizer/workflows/golangci-lint/badge.svg)
-![Build Status](https://github.com/ymettier/fileganizer/workflows/Go/badge.svg)
+![Build Status](https://github.com/ymettier/fileganizer/workflows/go-build/badge.svg)
 
 # Fileganizer
 
