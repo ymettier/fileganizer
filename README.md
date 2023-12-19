@@ -1,3 +1,6 @@
+![Lint Status](https://github.com/ymettier/fileganizer/workflows/golangci-lint/badge.svg)
+![Build Status](https://github.com/ymettier/fileganizer/workflows/go-build/badge.svg)
+
 # Fileganizer
 
 Fileganizer is a tool that will
