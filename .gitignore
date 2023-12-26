@@ -2,3 +2,4 @@ config.yaml
 logs/*
 fileganizer
 TODO
+textextract/logs/
