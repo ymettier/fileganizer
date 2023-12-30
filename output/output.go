@@ -52,12 +52,15 @@ func (o Output) FromTemplate(tmpl string, vars map[string]any) (string, error) {
 		fulltemplate = strings.Join(append([]string{o.CommonTemplate}, tmpl), "\n")
 	}
 
-	mytemplate := template.Must(template.New("main").Funcs(funcMap).Parse(fulltemplate))
+	mytemplate, err := template.New("main").Funcs(funcMap).Parse(fulltemplate)
+	if err != nil {
+		l.Error("Failed to parse template", zap.Error(err))
+		return "", err
+	}
 
 	var doc bytes.Buffer
-	err := mytemplate.Execute(&doc, vars)
-	if err != nil {
-		l.Fatal("Failed to execute template", zap.Error(err))
+	if err := mytemplate.Execute(&doc, vars); err != nil {
+		l.Error("Failed to execute template", zap.Error(err))
 		return "", err
 	}
 
