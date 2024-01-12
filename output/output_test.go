@@ -4,10 +4,13 @@
 package output
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+var logFilename = "output.log"
 
 var months = map[string][]string{
 	"French": {"Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Aout", "Septembre", "Octobre", "Novembre", "Décembre"},
@@ -44,6 +47,8 @@ func TestFromTemplateWithCommonTemplate(t *testing.T) {
 }
 
 func TestFromTemplateWithBrokenTemplate(t *testing.T) {
+	os.Setenv("LOG_FILENAME", logFilename)
+	defer os.Remove(logFilename)
 	o := New("year {{ .year }}", months)
 
 	_, err := o.FromTemplate("{{", vars)

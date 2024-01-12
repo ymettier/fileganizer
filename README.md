@@ -45,6 +45,12 @@ When you want to run the output as a shell command, add `-r` option: `fileganize
 go build
 ```
 
+## Test
+
+```
+go test ./...
+```
+
 ## Run
 
 Run `fileganizer` on a file and print the generated output:
@@ -61,6 +67,13 @@ Show pdf text contents
 ```
 ./fileganizer -c <config.yaml> -f <file.pdf> -t
 ```
+
+## Environment variables
+
+| Name         | Value                                                                          |
+|--------------|--------------------------------------------------------------------------------|
+| LOG_FILENAME | file to log in. Default value : `log/app.log`                                  |
+| LOG_LEVEL    | one of `debug`, `info`, `warn`, `error`, `panic` or `fatal`. Default is `info` |
 
 ## Licensing
 
