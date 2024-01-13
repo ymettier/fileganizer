@@ -35,3 +35,18 @@ func TestFileykjwmwqqjhght(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, output, "Invoice Summary\n  date: 2014-03-27\n  number: 001\n")
 }
+
+func TestFileykjwmwqqjhghtEnv(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }() // os.Args is a "global variable", so keep the state from before the test, and restore it after.
+
+	os.Setenv("SOMEVAR", "magic")
+	os.Args = []string{"./fileganizer", "-c", "testdata/config.ykjwmwqqjhghEnv.yaml", "-f", "testdata/ykjwmwqqjhgh.txt"}
+
+	output, err := captureOutput(func() error {
+		main()
+		return nil
+	})
+	assert.Nil(t, err)
+	assert.Equal(t, output, "Invoice magic Summary\n  date: 2014-03-27\n  number: 001\n")
+}

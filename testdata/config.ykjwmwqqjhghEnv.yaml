@@ -1,0 +1,38 @@
+---
+ExtractTextCommand: ["cat", "FILENAME"]
+
+env:
+  - SOMEVAR
+
+months:
+  MONTHSENGLISH: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+  MONTHSFRENCH: ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Aout", "Septembre", "Octobre", "Novembre", "Décembre"]
+  MONTHSFRENCHLOWERCASE: ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"]
+
+grokPatterns:
+  NUMBER: '[0-9]+'
+  STRING: '\\w+'
+  JUSTMATCH: '.*'
+  SPACESANDEMPTYLINES: '[\s\n]+'
+  YEAR: "(?:\\d\\d){1,2}"
+  MONTHNUM2: "0[1-9]|1[0-2]"
+  MONTHDAY: "(?:0[1-9])|(?:[12][0-9])|(?:3[01])|[1-9]"
+
+# Common template needs these templates :
+# - newFilePath
+# - newFilename
+# - invoiceDate
+# - invoiceName
+#
+commonTemplate: |
+    Invoice {{ .env.SOMEVAR }} Summary
+
+fileDescriptions:
+  ykjwmwqqjhgh:
+    patterns:
+      - "%{JUSTMATCH:matched}Company Foo,"
+      - "(?s)Invoice\\n\\nNo %{NUMBER:invoiceNumber}\\n%{MONTHSENGLISH:month} %{MONTHDAY:day}, %{YEAR:year}"
+    output : |
+      {{- define "invoiceDate" }}{{ .grok.year }}-{{ MonthIndex .grok.month }}-{{ .grok.day }}{{- end }}
+        date: {{ template "invoiceDate" . }}
+        number: {{ .grok.invoiceNumber }}
