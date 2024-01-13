@@ -1,0 +1,14 @@
+File ykjwmwqqjhgh.pdf comes from https://es.overleaf.com/latex/templates/yet-another-invoice-template/ykjwmwqqjhgh
+
+Author: Elie Roux
+License: Other (as stated in the work)
+Abstract:
+
+    Straightforward and easy to tweak invoice template.
+
+    Updates may be available at https://github.com/eroux/latex-yait
+
+    The file is under the CC0 license (https://creativecommons.org/publicdomain/zero/1.0/).
+
+
+File ykjwmwqqjhgh.txt was generated with `pdf2txt ykjwmwqqjhgh.pdf > ykjwmwqqjhgh.txt`
