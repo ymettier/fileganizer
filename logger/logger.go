@@ -29,7 +29,7 @@ func Get() *zap.Logger {
 		stdout := zapcore.AddSync(os.Stdout)
 
 		filename := os.Getenv("LOG_FILENAME")
-		if len(filename) == 0 {
+		if filename == "" {
 			filename = "logs/app.log"
 		}
 		file := zapcore.AddSync(&lumberjack.Logger{

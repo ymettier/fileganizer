@@ -31,6 +31,8 @@ func TestGetOtherLogFile(t *testing.T) {
 		return
 	}
 
+	defer os.Remove(filename)
+
 	jsonFile, err := os.Open(filename)
 	if !assert.NoError(t, err) {
 		return
@@ -38,13 +40,15 @@ func TestGetOtherLogFile(t *testing.T) {
 
 	defer jsonFile.Close()
 	byteValue, _ := io.ReadAll(jsonFile)
+
 	var result map[string]any
-	json.Unmarshal([]byte(byteValue), &result)
+	if err = json.Unmarshal(byteValue, &result); !assert.NoError(t, err) {
+		return
+	}
 	// result :
 	// {"level":"warn","timestamp":"2024-01-13T00:07:58.928+0100","msg":"Message","git_revision":"","go_version":"go1.21.5"}
 	if !assert.Contains(t, result, "msg") {
 		return
 	}
 	assert.Equal(t, result["msg"], "Message")
-	os.Remove(filename)
 }
