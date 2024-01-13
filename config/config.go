@@ -7,6 +7,7 @@ import (
 	"fileganizer/logger"
 	"fmt"
 	"os"
+	"reflect"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -157,13 +158,17 @@ func (c *Config) readConfig(filename string) error {
 
 	// parse env
 	c.EnvVars = make(map[string]string)
-	for _, e := range data["env"].([]any) {
-		val, ok := os.LookupEnv(e.(string))
-		if !ok {
-			l.Fatal("Environment variable (from configuration file) is not set", zap.String("name", e.(string)))
-			return err
+	if _, ok := data["env"]; ok {
+		if reflect.TypeOf(data["env"]) != nil && reflect.TypeOf(data["env"]).String() == "slice" {
+			for _, e := range data["env"].([]any) {
+				val, ok := os.LookupEnv(e.(string))
+				if !ok {
+					l.Fatal("Environment variable (from configuration file) is not set", zap.String("name", e.(string)))
+					return err
+				}
+				c.EnvVars[e.(string)] = val
+			}
 		}
-		c.EnvVars[e.(string)] = val
 	}
 
 	// parse commonTemplate
