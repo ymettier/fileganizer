@@ -6,13 +6,13 @@ package config
 import (
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestVersion(t *testing.T) {
 	wantedVersion := "1.2.3"
 	output := printVersion(wantedVersion)
 	s := strings.Split(output, "\n")
-	if s[0] != "Version        : "+wantedVersion {
-		t.Fatalf(`printVersion(%s) = %q, beginning with %q, wanted %s, nil`, wantedVersion, output, s[0], wantedVersion)
-	}
+	assert.Equal(t, "Version        : "+wantedVersion, s[0], "Printing version")
 }

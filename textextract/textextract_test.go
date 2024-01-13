@@ -4,10 +4,11 @@
 package textextract
 
 import (
-	"errors"
 	"os"
 	"os/exec"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 const filename = "testfile"
@@ -45,9 +46,8 @@ func TestTextExtractCat(t *testing.T) {
 		t.Fatalf(`TestTextExtract : failed with error %v`, err)
 	}
 
-	if output != fileContent {
-		t.Fatalf(`TestTextExtract : file contents '%v' differs from expected contents '%v'`, output, fileContent)
-	}
+	assert.Equal(t, fileContent, output, `TestTextExtract : file contents '%v' differs from expected contents '%v'`, output, fileContent)
+
 	err = os.Remove(filename)
 	if err != nil {
 		t.Fatalf(`TestTextExtract : failed to remove file '%s'`, filename)
@@ -65,11 +65,8 @@ func TestTextExtractCommandDoesNotExist(t *testing.T) {
 	}
 
 	_, err = TextExtract(filename, command)
-	if err != nil {
-		if !errors.Is(err, exec.ErrNotFound) {
-			t.Fatalf(`TestTextExtract : failed with error %v`, err)
-		}
-	}
+
+	assert.ErrorIsf(t, err, exec.ErrNotFound, `TestTextExtract : failed with error %v`, err)
 
 	err = os.Remove(filename)
 	if err != nil {
@@ -81,14 +78,10 @@ func TestTextExtractFilenameDoesNotExist(t *testing.T) {
 	command := []string{"cat", "FILENAME"}
 
 	_, err := TextExtract(filename, command)
-	if err != nil {
-		want := "exit status 1"
-		if werr, ok := err.(*exec.ExitError); ok {
-			if s := werr.Error(); s != want {
-				t.Fatalf(`TestTextExtract : running with file that does not exists, got '%q', wants '%q'`, s, want)
-			}
-		} else {
-			t.Fatalf("expected *exec.ExitError from command with file that does not exist; got %T: %v", err, err)
+	if assert.Error(t, err) {
+		werr, ok := err.(*exec.ExitError)
+		if assert.Truef(t, ok, `TestTextExtract : expected exec.ExitError. Got %T : %v`, err, err) {
+			assert.Equalf(t, "exit status 1", werr.Error(), `TestTextExtract : wrong error`)
 		}
 	}
 }

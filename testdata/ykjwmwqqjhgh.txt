@@ -1,0 +1,80 @@
+Comp.
+
+thank you for your conﬁdence!
+
+Invoice
+
+No 001
+March 27, 2014
+
+Company Foo,
+Temple Bar,
+Dublin.
+
+Title of the invoice
+
+product
+
+unit price
+
+qty.
+
+price
+
+15 €
+
+25 €
+
+35 €
+
+45 €
+
+10
+
+10
+
+10
+
+10
+
+150 €
+
+250 €
+
+350 €
+
+450 €
+
+1200 €
+
+My product 1
+
+My product 2
+
+My product 3
+
+My product 4
+
+Total1
+
+Comp.,
+Auto-entrepreneur (APE XXXXX),
+foo, bar street, XXXXX City,
+SIREN : XXX XXXX XXXX,
+
+Conditions de paiement: write the sell conditions here
+on several lines
+
+1example of footnote
+
+XX XX XX XX XX,
+xxx@xxx.xxx,
+
+Tél :
+Mél :
+IBAN : XXXX XXXX XXXX XXXX XXXX XXXX XXXX,
+BIC :
+
+XXX XXX XXX
+
+
