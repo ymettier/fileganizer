@@ -26,7 +26,7 @@ func TestFileykjwmwqqjhght(t *testing.T) {
 	oldArgs := os.Args
 	defer func() { os.Args = oldArgs }() // os.Args is a "global variable", so keep the state from before the test, and restore it after.
 
-	os.Args = []string{"./fileganizer", "-c", "test_data/config.yaml", "-f", "test_data/ykjwmwqqjhgh.txt"}
+	os.Args = []string{"./fileganizer", "-c", "testdata/config.yaml", "-f", "testdata/ykjwmwqqjhgh.txt"}
 
 	output, err := captureOutput(func() error {
 		main()
