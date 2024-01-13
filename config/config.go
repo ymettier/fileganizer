@@ -159,7 +159,7 @@ func (c *Config) readConfig(filename string) error {
 	// parse env
 	c.EnvVars = make(map[string]string)
 	if _, ok := data["env"]; ok {
-		if reflect.TypeOf(data["env"]) != nil && reflect.TypeOf(data["env"]).String() == "slice" {
+		if reflect.TypeOf(data["env"]) != nil && reflect.TypeOf(data["env"]).String() == "[]interface {}" {
 			for _, e := range data["env"].([]any) {
 				val, ok := os.LookupEnv(e.(string))
 				if !ok {
