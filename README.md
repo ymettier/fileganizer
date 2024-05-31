@@ -70,10 +70,13 @@ Show pdf text contents
 
 ## Environment variables
 
-| Name         | Value                                                                          |
-|--------------|--------------------------------------------------------------------------------|
-| LOG_FILENAME | file to log in. Default value : `log/app.log`                                  |
-| LOG_LEVEL    | one of `debug`, `info`, `warn`, `error`, `panic` or `fatal`. Default is `info` |
+| Name              | Value                                                                                     |
+|-------------------|-------------------------------------------------------------------------------------------|
+| LOG_TXT_FILENAME  | file to log in, in plain text. Possible values: `stdout`, `stderr`, any filename.         |
+| LOG_JSON_FILENAME | file to log in, in json format. Possible values: `stdout`, `stderr`, any filename.        |
+| LOG_LEVEL         | one of `debug`, `info`, `warn`, `error`, `panic` or `fatal`. Default is `info`            |
+
+Note : if none of `LOG_TXT_FILENAME` or `LOG_JSON_FILENAME` is set, logging will output to stdout in plain text format, same as if `LOG_TXT_FILENAME=stdout`.
 
 ## Licensing
 

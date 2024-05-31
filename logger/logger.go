@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime"
 	"runtime/debug"
 	"sync"
 
@@ -22,75 +23,108 @@ var once sync.Once
 
 var logger *zap.Logger
 
+func getGitRevision() string {
+	buildInfo, ok := debug.ReadBuildInfo()
+	if !ok {
+		return ""
+	}
+	for _, v := range buildInfo.Settings {
+		if v.Key == "vcs.revision" {
+			return v.Value
+		}
+	}
+	return ""
+}
+
+// Loggers are defined with these environment variables:
+// - LOG_TXT_FILENAME
+// - LOG_JSON_FILENAME
+//
+// The value can be either "stdout", "stderr" or a filename.
+//
+// LOG_LEVEL environment variable sets the log level.
+func newLogger() *zap.Logger {
+	// Define log level
+	level := zap.InfoLevel
+	levelEnv := os.Getenv("LOG_LEVEL")
+	if levelEnv != "" {
+		levelFromEnv, err := zapcore.ParseLevel(levelEnv)
+		if err != nil {
+			log.Println(
+				fmt.Errorf("invalid level, defaulting to INFO: %w", err),
+			)
+		}
+		level = levelFromEnv
+	}
+
+	logLevel := zap.NewAtomicLevelAt(level)
+
+	// Define logFd for outputs
+	logFd := make(map[string]zapcore.WriteSyncer)
+	for _, t := range []string{"TXT", "JSON"} {
+		filename := os.Getenv("LOG_" + t + "_FILENAME")
+
+		if filename != "" {
+			switch filename {
+			case "stdout":
+				logFd[t] = zapcore.AddSync(os.Stdout)
+			case "stderr":
+				logFd[t] = zapcore.AddSync(os.Stderr)
+			default:
+				logFd[t] = zapcore.AddSync(&lumberjack.Logger{
+					Filename:   filename,
+					MaxSize:    5,
+					MaxBackups: 10,
+					MaxAge:     14,
+					Compress:   true,
+				})
+			}
+		}
+	}
+	if len(logFd) == 0 {
+		logFd["TXT"] = zapcore.AddSync(os.Stderr)
+	}
+
+	// Define main core
+	core := zapcore.NewTee()
+
+	// Define and append TXT logger core
+	if _, ok := logFd["TXT"]; ok {
+		loggerTxtCfg := zap.NewDevelopmentEncoderConfig()
+		loggerTxtCfg.EncodeLevel = zapcore.CapitalColorLevelEncoder
+		loggerTxtEncoder := zapcore.NewConsoleEncoder(loggerTxtCfg)
+		loggerCore := zapcore.NewCore(loggerTxtEncoder, logFd["TXT"], logLevel)
+		core = zapcore.NewTee(core, loggerCore)
+	}
+
+	// Define JSON logger core
+	if _, ok := logFd["JSON"]; ok {
+		loggerJSONCfg := zap.NewProductionEncoderConfig()
+		loggerJSONCfg.TimeKey = "timestamp"
+		loggerJSONCfg.EncodeTime = zapcore.ISO8601TimeEncoder
+		loggerJSONEncoder := zapcore.NewJSONEncoder(loggerJSONCfg)
+
+		gitRevision := getGitRevision()
+
+		loggerCore := zapcore.NewCore(loggerJSONEncoder, logFd["JSON"], logLevel).
+			With(
+				[]zapcore.Field{
+					zap.String("git_revision", gitRevision),
+					zap.String("go_version", runtime.Version()),
+				},
+			)
+		core = zapcore.NewTee(core, loggerCore)
+	}
+
+	// Create new zap
+	return zap.New(core)
+}
+
 // Get initializes a zap.Logger instance if it has not been initialized
 // already and returns the same instance for subsequent calls.
 func Get() *zap.Logger {
 	once.Do(func() {
-		stdout := zapcore.AddSync(os.Stdout)
-
-		filename := os.Getenv("LOG_FILENAME")
-		if filename == "" {
-			filename = "logs/app.log"
-		}
-		file := zapcore.AddSync(&lumberjack.Logger{
-			Filename:   filename,
-			MaxSize:    5,
-			MaxBackups: 10,
-			MaxAge:     14,
-			Compress:   true,
-		})
-
-		level := zap.InfoLevel
-		levelEnv := os.Getenv("LOG_LEVEL")
-		if levelEnv != "" {
-			levelFromEnv, err := zapcore.ParseLevel(levelEnv)
-			if err != nil {
-				log.Println(
-					fmt.Errorf("invalid level, defaulting to INFO: %w", err),
-				)
-			}
-
-			level = levelFromEnv
-		}
-
-		logLevel := zap.NewAtomicLevelAt(level)
-
-		productionCfg := zap.NewProductionEncoderConfig()
-		productionCfg.TimeKey = "timestamp"
-		productionCfg.EncodeTime = zapcore.ISO8601TimeEncoder
-
-		developmentCfg := zap.NewDevelopmentEncoderConfig()
-		developmentCfg.EncodeLevel = zapcore.CapitalColorLevelEncoder
-
-		consoleEncoder := zapcore.NewConsoleEncoder(developmentCfg)
-		fileEncoder := zapcore.NewJSONEncoder(productionCfg)
-
-		var gitRevision string
-
-		buildInfo, ok := debug.ReadBuildInfo()
-		if ok {
-			for _, v := range buildInfo.Settings {
-				if v.Key == "vcs.revision" {
-					gitRevision = v.Value
-					break
-				}
-			}
-		}
-
-		// log to multiple destinations (console and file)
-		// extra fields are added to the JSON output alone
-		core := zapcore.NewTee(
-			zapcore.NewCore(consoleEncoder, stdout, logLevel),
-			zapcore.NewCore(fileEncoder, file, logLevel).
-				With(
-					[]zapcore.Field{
-						zap.String("git_revision", gitRevision),
-						zap.String("go_version", buildInfo.GoVersion),
-					},
-				),
-		)
-
-		logger = zap.New(core)
+		logger = newLogger()
 	})
 
 	return logger
