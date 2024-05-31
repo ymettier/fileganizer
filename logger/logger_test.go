@@ -13,19 +13,53 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestGetOtherLogFile(t *testing.T) {
-	// Note : we cannot test more than one logger file
-	// because Get() will run only once (thanks to sync.Once).
-	// So we test only with the file specified in the env var LOG_FILENAME.
-	filename := "fileganizer_test.log"
-	os.Setenv("LOG_FILENAME", filename)
+func TestGetOtherTxtLogFile(t *testing.T) {
+	filename := "txt_test.log"
+	os.Setenv("LOG_TXT_FILENAME", filename)
+	defer os.Unsetenv("LOG_TXT_FILENAME")
 
 	// Remove the logs file before the test
 	if _, err := os.Stat(filename); !errors.Is(err, os.ErrNotExist) {
 		os.Remove(filename)
 	}
 
-	l := Get()
+	l := newLogger()
+	l.Warn("Message")
+	if !assert.FileExists(t, filename) {
+		return
+	}
+
+	defer os.Remove(filename)
+
+	txtFile, err := os.Open(filename)
+	if !assert.NoError(t, err) {
+		return
+	}
+
+	defer txtFile.Close()
+	byteValue, _ := io.ReadAll(txtFile)
+
+	// result :
+	// 2024-01-13T00:07:58.928+0100	WARN	Message
+	if !assert.Contains(t, string(byteValue), "WARN") {
+		return
+	}
+	if !assert.Contains(t, string(byteValue), "Message") {
+		return
+	}
+}
+
+func TestGetOtherJsonLogFile(t *testing.T) {
+	filename := "json_test.log"
+	os.Setenv("LOG_JSON_FILENAME", filename)
+	defer os.Unsetenv("LOG_JSON_FILENAME")
+
+	// Remove the logs file before the test
+	if _, err := os.Stat(filename); !errors.Is(err, os.ErrNotExist) {
+		os.Remove(filename)
+	}
+
+	l := newLogger()
 	l.Warn("Message")
 	if !assert.FileExists(t, filename) {
 		return

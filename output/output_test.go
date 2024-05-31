@@ -47,7 +47,8 @@ func TestFromTemplateWithCommonTemplate(t *testing.T) {
 }
 
 func TestFromTemplateWithBrokenTemplate(t *testing.T) {
-	os.Setenv("LOG_FILENAME", logFilename)
+	os.Setenv("LOG_JSON_FILENAME", logFilename)
+	defer os.Unsetenv("LOG_JSON_FILENAME")
 	defer os.Remove(logFilename)
 	o := New("year {{ .year }}", months)
 
