@@ -48,7 +48,7 @@ func (o Output) FromTemplate(tmpl string, vars map[string]any) (string, error) {
 		"NowYYYYMMDD_HHMMSS": func() string { return time.Now().Format("20060102_030405") },
 	}
 	fulltemplate := tmpl
-	if len(o.CommonTemplate) > 0 {
+	if o.CommonTemplate != "" {
 		fulltemplate = strings.Join(append([]string{o.CommonTemplate}, tmpl), "\n")
 	}
 
