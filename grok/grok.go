@@ -7,7 +7,6 @@ import (
 	"fileganizer/logger"
 
 	"github.com/logrusorgru/grokky"
-	"go.uber.org/zap"
 )
 
 type Grok struct {
@@ -32,7 +31,7 @@ func (g *Grok) ParseAll(grokPatterns []string, text string) (map[string]string, 
 			return nil, err
 		}
 		if len(r) == 0 {
-			l.Debug("No pattern matched", zap.String("pattern", p))
+			l.Debug("No pattern matched", "pattern", p)
 			return nil, nil
 		} else {
 			for k, v := range r {
@@ -45,10 +44,10 @@ func (g *Grok) ParseAll(grokPatterns []string, text string) (map[string]string, 
 
 func (g *Grok) Parse(grokPattern, text string) (map[string]string, error) {
 	l := logger.Get()
-	l.Debug("Testing pattern", zap.String("pattern", grokPattern), zap.String("text", text))
+	l.Debug("Testing pattern", "pattern", grokPattern, "text", text)
 	p, err := g.Host.Compile(grokPattern)
 	if err != nil {
-		l.Fatal("grok compile failed", zap.Error(err))
+		l.Fatal("grok compile failed", "error", err)
 		return nil, err
 	}
 	result := p.Parse(text)

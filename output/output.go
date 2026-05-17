@@ -10,8 +10,6 @@ import (
 	"strings"
 	"text/template"
 	"time"
-
-	"go.uber.org/zap"
 )
 
 type Output struct {
@@ -54,13 +52,13 @@ func (o Output) FromTemplate(tmpl string, vars map[string]any) (string, error) {
 
 	mytemplate, err := template.New("main").Funcs(funcMap).Parse(fulltemplate)
 	if err != nil {
-		l.Error("Failed to parse template", zap.Error(err))
+		l.Error("Failed to parse template", "error", err)
 		return "", err
 	}
 
 	var doc bytes.Buffer
 	if err := mytemplate.Execute(&doc, vars); err != nil {
-		l.Error("Failed to execute template", zap.Error(err))
+		l.Error("Failed to execute template", "error", err)
 		return "", err
 	}
 

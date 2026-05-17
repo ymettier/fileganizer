@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/alecthomas/kong"
-	"go.uber.org/zap"
 	yaml "gopkg.in/yaml.v3"
 )
 
@@ -107,15 +106,14 @@ func (c *Config) readConfig(filename string) error {
 	l := logger.Get()
 	yamlFile, err := os.ReadFile(filename)
 	if err != nil {
-		l.Fatal("Could not read configuration file", zap.String("file", filename), zap.Error(err))
-		return err
+		l.Fatal("Could not read configuration file", "file", filename, "error", err)
 	}
 
 	err = yaml.Unmarshal(yamlFile, &data)
 	if err != nil {
-		l.Fatal("Could not parse configuration file", zap.String("file", filename), zap.Error(err))
-		return err
+		l.Fatal("Could not parse configuration file", "file", filename, "error", err)
 	}
+
 	// Configuration file format
 	//
 	// ExtractTextCommand: ["pdftotext", "-nopgbrk", "-enc", "UTF-8", "FILENAME", "-"]
@@ -163,8 +161,7 @@ func (c *Config) readConfig(filename string) error {
 			for _, e := range data["env"].([]any) {
 				val, ok := os.LookupEnv(e.(string))
 				if !ok {
-					l.Fatal("Environment variable (from configuration file) is not set", zap.String("name", e.(string)))
-					return err
+					l.Fatal("Environment variable (from configuration file) is not set", "name", e.(string))
 				}
 				c.EnvVars[e.(string)] = val
 			}
