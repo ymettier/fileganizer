@@ -35,7 +35,7 @@ func createFile(filename, contents string) error {
 func TestTextExtractCat(t *testing.T) {
 	fileContent := "Some Contents\non more than\none line"
 
-	command := []string{"cat", "FILENAME"}
+	command := []string{"cat", "FILENAME"} //nolint:goconst // In the test, it must be explicitly set to "FILENAME"
 
 	err := createFile(filename, fileContent)
 	if err != nil {

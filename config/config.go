@@ -101,7 +101,7 @@ func New(version string) (Config, error) {
 	return cfg, nil
 }
 
-func (c *Config) readConfig(filename string) error {
+func (c *Config) readConfig(filename string) error { //nolint:unparam // Functions should return an error even if always nil.
 	var data map[string]any
 	l := logger.Get()
 	yamlFile, err := os.ReadFile(filename)
