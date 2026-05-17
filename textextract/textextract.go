@@ -10,6 +10,8 @@ import (
 	"os/exec"
 )
 
+const templateFileName = "FILENAME"
+
 func TextExtract(ctx context.Context, filename string, command []string) (string, error) {
 	l := logger.Get()
 	l.Debug("ExtractTextCommand", "command", command)
@@ -18,7 +20,7 @@ func TextExtract(ctx context.Context, filename string, command []string) (string
 		if i == 0 {
 			continue
 		}
-		if v == "FILENAME" {
+		if v == templateFileName {
 			args = append(args, filename)
 		} else {
 			args = append(args, v)
