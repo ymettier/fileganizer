@@ -8,12 +8,9 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"runtime"
-	"runtime/debug"
 	"strings"
 	"sync"
-
-	lumberjack "gopkg.in/natefinch/lumberjack.v2"
+	"syscall"
 )
 
 type ctxKey struct{}
@@ -27,64 +24,12 @@ type Logger struct {
 }
 
 func (l *Logger) Fatal(msg string, args ...any) {
-	l.Logger.Error(msg, args...)
+	l.Error(msg, args...)
 	os.Exit(1)
-}
-
-func getGitRevision() string {
-	buildInfo, ok := debug.ReadBuildInfo()
-	if !ok {
-		return ""
-	}
-	for _, v := range buildInfo.Settings {
-		if v.Key == "vcs.revision" {
-			return v.Value
-		}
-	}
-	return ""
-}
-
-type multiHandler struct {
-	handlers []slog.Handler
-}
-
-func (h *multiHandler) Enabled(ctx context.Context, level slog.Level) bool {
-	for _, handler := range h.handlers {
-		if handler.Enabled(ctx, level) {
-			return true
-		}
-	}
-	return false
-}
-
-func (h *multiHandler) Handle(ctx context.Context, r slog.Record) error {
-	for _, handler := range h.handlers {
-		if handler.Enabled(ctx, r.Level) {
-			_ = handler.Handle(ctx, r)
-		}
-	}
-	return nil
-}
-
-func (h *multiHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	handlers := make([]slog.Handler, len(h.handlers))
-	for i, handler := range h.handlers {
-		handlers[i] = handler.WithAttrs(attrs)
-	}
-	return &multiHandler{handlers: handlers}
-}
-
-func (h *multiHandler) WithGroup(name string) slog.Handler {
-	handlers := make([]slog.Handler, len(h.handlers))
-	for i, handler := range h.handlers {
-		handlers[i] = handler.WithGroup(name)
-	}
-	return &multiHandler{handlers: handlers}
 }
 
 // Loggers are defined with these environment variables:
 // - LOG_TXT_FILENAME
-// - LOG_JSON_FILENAME
 //
 // The value can be either "stdout", "stderr" or a filename.
 //
@@ -106,60 +51,31 @@ func newLogger() *Logger {
 		Level: level,
 	}
 
-	// Define logFd for outputs
-	logWriters := make(map[string]io.Writer)
-	for _, t := range []string{"TXT", "JSON"} {
-		filename := os.Getenv("LOG_" + t + "_FILENAME")
+	// Define log writer
+	var w io.Writer = os.Stderr
+	filename := os.Getenv("LOG_TXT_FILENAME")
 
-		if filename != "" {
-			switch filename {
-			case "stdout":
-				logWriters[t] = os.Stdout
-			case "stderr":
-				logWriters[t] = os.Stderr
-			default:
-				logWriters[t] = &lumberjack.Logger{
-					Filename:   filename,
-					MaxSize:    5,
-					MaxBackups: 10,
-					MaxAge:     14,
-					Compress:   true,
-				}
+	if filename != "" {
+		switch filename {
+		case "stdout":
+			w = os.Stdout
+		case "stderr":
+			w = os.Stderr
+		default:
+			f, err := os.OpenFile(filename, //nolint:gosec // The user specifies the filename in the configuration file.
+				os.O_APPEND|os.O_CREATE|os.O_WRONLY,
+				syscall.S_IRUSR|syscall.S_IWUSR|syscall.S_IRGRP|syscall.S_IROTH,
+			)
+			if err != nil {
+				slog.Warn("failed to open log file, defaulting to stderr", "filename", filename, "error", err)
+			} else {
+				w = f
 			}
 		}
 	}
-	if len(logWriters) == 0 {
-		logWriters["TXT"] = os.Stderr
-	}
-
-	var handlers []slog.Handler
-
-	// Define and append TXT logger core
-	if w, ok := logWriters["TXT"]; ok {
-		handlers = append(handlers, slog.NewTextHandler(w, opts))
-	}
-
-	// Define JSON logger core
-	if w, ok := logWriters["JSON"]; ok {
-		jsonOpts := &slog.HandlerOptions{
-			Level: level,
-			ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-				if a.Key == slog.TimeKey {
-					return slog.String("timestamp", a.Value.Time().Format("2006-01-02T15:04:05.000Z0700"))
-				}
-				return a
-			},
-		}
-		gitRevision := getGitRevision()
-		h := slog.NewJSONHandler(w, jsonOpts).WithAttrs([]slog.Attr{
-			slog.String("git_revision", gitRevision),
-			slog.String("go_version", runtime.Version()),
-		})
-		handlers = append(handlers, h)
-	}
 
 	// Create new logger
-	return &Logger{slog.New(&multiHandler{handlers: handlers})}
+	return &Logger{slog.New(slog.NewTextHandler(w, opts))}
 }
 
 // Get initializes a Logger instance if it has not been initialized
