@@ -42,13 +42,13 @@ When you want to run the output as a shell command, add `-r` option: `fileganize
 ## Build
 
 ```
-go build
+echo dev > version.txt && go build
 ```
 
 ## Test
 
 ```
-go test ./...
+echo dev > version.txt && go test ./...
 ```
 
 ## Run

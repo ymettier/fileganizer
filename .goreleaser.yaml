@@ -10,9 +10,7 @@ version: 2
 
 before:
   hooks:
-    # You may remove this if you don't use go modules.
     - go mod tidy
-    # you may remove this if you don't need go generate
     - go generate ./...
 
 builds:
@@ -22,8 +20,11 @@ builds:
     goos:
       - linux
     goarch:
-      - arm64
       - amd64
+      - arm64
+    hooks:
+      pre:
+        - sh -c 'echo "{{ .Version }}" > version.txt'
 
 archives:
   - formats: [binary]
