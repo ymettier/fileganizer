@@ -4,6 +4,7 @@
 package textextract
 
 import (
+	"context"
 	"fileganizer/logger"
 
 	"os/exec"
@@ -11,7 +12,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func TextExtract(filename string, command []string) (string, error) {
+func TextExtract(ctx context.Context, filename string, command []string) (string, error) {
 	l := logger.Get()
 	l.Debug("ExtractTextCommand", zap.Strings("command", command))
 	args := make([]string, 0)
@@ -26,7 +27,7 @@ func TextExtract(filename string, command []string) (string, error) {
 		}
 	}
 	l.Debug("ExtractTextCommand", zap.String("command", command[0]))
-	source, err := exec.Command(command[0], args...).Output() //nolint:gosec
+	source, err := exec.CommandContext(ctx, command[0], args...).Output() //nolint:gosec
 	if err != nil {
 		l.Error("ExtractTextCommand failed", zap.Error(err))
 		return "", err

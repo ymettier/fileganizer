@@ -4,6 +4,7 @@
 package textextract
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"testing"
@@ -41,7 +42,7 @@ func TestTextExtractCat(t *testing.T) {
 		t.Fatalf(`TestTextExtract : failed to create file '%s' with contents '%s'`, filename, fileContent)
 	}
 
-	output, err := TextExtract(filename, command)
+	output, err := TextExtract(context.Background(), filename, command)
 	if err != nil {
 		t.Fatalf(`TestTextExtract : failed with error %v`, err)
 	}
@@ -64,7 +65,7 @@ func TestTextExtractCommandDoesNotExist(t *testing.T) {
 		t.Fatalf(`TestTextExtract : failed to create file '%s' with contents '%s'`, filename, fileContent)
 	}
 
-	_, err = TextExtract(filename, command)
+	_, err = TextExtract(context.Background(), filename, command)
 
 	assert.ErrorIsf(t, err, exec.ErrNotFound, `TestTextExtract : failed with error %v`, err)
 
@@ -77,7 +78,7 @@ func TestTextExtractCommandDoesNotExist(t *testing.T) {
 func TestTextExtractFilenameDoesNotExist(t *testing.T) {
 	command := []string{"cat", "FILENAME"}
 
-	_, err := TextExtract(filename, command)
+	_, err := TextExtract(context.Background(), filename, command)
 	if assert.Error(t, err) {
 		werr, ok := err.(*exec.ExitError)
 		if assert.Truef(t, ok, `TestTextExtract : expected exec.ExitError. Got %T : %v`, err, err) {
