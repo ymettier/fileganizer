@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"fileganizer/config"
 	"fileganizer/grok"
 	"fileganizer/logger"
@@ -33,7 +34,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	txt, err := textextract.TextExtract(cfg.InputFile, cfg.ExtractTextCommand)
+	txt, err := textextract.TextExtract(context.Background(), cfg.InputFile, cfg.ExtractTextCommand)
 	if err != nil {
 		os.Exit(1)
 	}
@@ -61,7 +62,7 @@ func main() {
 			continue
 		}
 		if cfg.NoDryRun {
-			run, err := exec.Command("bash", "-c", outputResult).Output()
+			run, err := exec.CommandContext(context.Background(), "bash", "-c", outputResult).Output()
 			fmt.Printf("%s", string(run))
 			if err != nil {
 				l.Fatal("Run output command", zap.String("command output", string(run)), zap.Error(err))

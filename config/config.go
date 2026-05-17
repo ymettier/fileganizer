@@ -14,7 +14,7 @@ import (
 
 	"github.com/alecthomas/kong"
 	"go.uber.org/zap"
-	"gopkg.in/yaml.v3"
+	yaml "gopkg.in/yaml.v3"
 )
 
 type VersionFlag bool
