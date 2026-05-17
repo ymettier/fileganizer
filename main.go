@@ -16,8 +16,6 @@ import (
 	"strings"
 
 	_ "embed"
-
-	"go.uber.org/zap"
 )
 
 var (
@@ -65,7 +63,7 @@ func main() {
 			run, err := exec.CommandContext(context.Background(), "bash", "-c", outputResult).Output()
 			fmt.Printf("%s", string(run))
 			if err != nil {
-				l.Fatal("Run output command", zap.String("command output", string(run)), zap.Error(err))
+				l.Fatal("Run output command", "command output", string(run), "error", err)
 				os.Exit(1)
 			}
 		} else {

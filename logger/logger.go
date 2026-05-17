@@ -5,124 +5,82 @@ package logger
 
 import (
 	"context"
-	"fmt"
-	"log"
+	"io"
+	"log/slog"
 	"os"
-	"runtime"
-	"runtime/debug"
+	"strings"
 	"sync"
-
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	lumberjack "gopkg.in/natefinch/lumberjack.v2"
+	"syscall"
 )
 
 type ctxKey struct{}
 
 var once sync.Once
 
-var logger *zap.Logger
+var logger *Logger
 
-func getGitRevision() string {
-	buildInfo, ok := debug.ReadBuildInfo()
-	if !ok {
-		return ""
-	}
-	for _, v := range buildInfo.Settings {
-		if v.Key == "vcs.revision" {
-			return v.Value
-		}
-	}
-	return ""
+type Logger struct {
+	*slog.Logger
+}
+
+func (l *Logger) Fatal(msg string, args ...any) {
+	l.Error(msg, args...)
+	os.Exit(1)
 }
 
 // Loggers are defined with these environment variables:
 // - LOG_TXT_FILENAME
-// - LOG_JSON_FILENAME
 //
 // The value can be either "stdout", "stderr" or a filename.
 //
 // LOG_LEVEL environment variable sets the log level.
-func newLogger() *zap.Logger {
+func newLogger() *Logger {
 	// Define log level
-	level := zap.InfoLevel
+	level := slog.LevelInfo
 	levelEnv := os.Getenv("LOG_LEVEL")
 	if levelEnv != "" {
-		levelFromEnv, err := zapcore.ParseLevel(levelEnv)
-		if err != nil {
-			log.Println(
-				fmt.Errorf("invalid level, defaulting to INFO: %w", err),
-			)
+		var l slog.Level
+		if err := l.UnmarshalText([]byte(strings.ToUpper(levelEnv))); err != nil {
+			slog.Warn("invalid level, defaulting to INFO", "error", err)
+		} else {
+			level = l
 		}
-		level = levelFromEnv
 	}
 
-	logLevel := zap.NewAtomicLevelAt(level)
+	opts := &slog.HandlerOptions{
+		Level: level,
+	}
 
-	// Define logFd for outputs
-	logFd := make(map[string]zapcore.WriteSyncer)
-	for _, t := range []string{"TXT", "JSON"} {
-		filename := os.Getenv("LOG_" + t + "_FILENAME")
+	// Define log writer
+	var w io.Writer = os.Stderr
+	filename := os.Getenv("LOG_TXT_FILENAME")
 
-		if filename != "" {
-			switch filename {
-			case "stdout":
-				logFd[t] = zapcore.AddSync(os.Stdout)
-			case "stderr":
-				logFd[t] = zapcore.AddSync(os.Stderr)
-			default:
-				logFd[t] = zapcore.AddSync(&lumberjack.Logger{
-					Filename:   filename,
-					MaxSize:    5,
-					MaxBackups: 10,
-					MaxAge:     14,
-					Compress:   true,
-				})
+	if filename != "" {
+		switch filename {
+		case "stdout":
+			w = os.Stdout
+		case "stderr":
+			w = os.Stderr
+		default:
+			f, err := os.OpenFile(filename, //nolint:gosec // The user specifies the filename in the configuration file.
+				os.O_APPEND|os.O_CREATE|os.O_WRONLY,
+				syscall.S_IRUSR|syscall.S_IWUSR|syscall.S_IRGRP|syscall.S_IROTH,
+			)
+			if err != nil {
+				slog.Warn("failed to open log file, defaulting to stderr", "filename", filename, "error", err)
+			} else {
+				w = f
 			}
 		}
 	}
-	if len(logFd) == 0 {
-		logFd["TXT"] = zapcore.AddSync(os.Stderr)
-	}
 
-	// Define main core
-	core := zapcore.NewTee()
-
-	// Define and append TXT logger core
-	if _, ok := logFd["TXT"]; ok {
-		loggerTxtCfg := zap.NewDevelopmentEncoderConfig()
-		loggerTxtCfg.EncodeLevel = zapcore.CapitalColorLevelEncoder
-		loggerTxtEncoder := zapcore.NewConsoleEncoder(loggerTxtCfg)
-		loggerCore := zapcore.NewCore(loggerTxtEncoder, logFd["TXT"], logLevel)
-		core = zapcore.NewTee(core, loggerCore)
-	}
-
-	// Define JSON logger core
-	if _, ok := logFd["JSON"]; ok {
-		loggerJSONCfg := zap.NewProductionEncoderConfig()
-		loggerJSONCfg.TimeKey = "timestamp"
-		loggerJSONCfg.EncodeTime = zapcore.ISO8601TimeEncoder
-		loggerJSONEncoder := zapcore.NewJSONEncoder(loggerJSONCfg)
-
-		gitRevision := getGitRevision()
-
-		loggerCore := zapcore.NewCore(loggerJSONEncoder, logFd["JSON"], logLevel).
-			With(
-				[]zapcore.Field{
-					zap.String("git_revision", gitRevision),
-					zap.String("go_version", runtime.Version()),
-				},
-			)
-		core = zapcore.NewTee(core, loggerCore)
-	}
-
-	// Create new zap
-	return zap.New(core)
+	// Create new logger
+	return &Logger{slog.New(slog.NewTextHandler(w, opts))}
 }
 
-// Get initializes a zap.Logger instance if it has not been initialized
+// Get initializes a Logger instance if it has not been initialized
 // already and returns the same instance for subsequent calls.
-func Get() *zap.Logger {
+func Get() *Logger {
 	once.Do(func() {
 		logger = newLogger()
 	})
@@ -133,19 +91,19 @@ func Get() *zap.Logger {
 // FromCtx returns the Logger associated with the ctx. If no logger
 // is associated, the default logger is returned, unless it is nil
 // in which case a disabled logger is returned.
-func FromCtx(ctx context.Context) *zap.Logger {
-	if l, ok := ctx.Value(ctxKey{}).(*zap.Logger); ok {
+func FromCtx(ctx context.Context) *Logger {
+	if l, ok := ctx.Value(ctxKey{}).(*Logger); ok {
 		return l
 	} else if l := logger; l != nil {
 		return l
 	}
 
-	return zap.NewNop()
+	return &Logger{slog.New(slog.NewTextHandler(io.Discard, nil))}
 }
 
 // WithCtx returns a copy of ctx with the Logger attached.
-func WithCtx(ctx context.Context, l *zap.Logger) context.Context {
-	if lp, ok := ctx.Value(ctxKey{}).(*zap.Logger); ok {
+func WithCtx(ctx context.Context, l *Logger) context.Context {
+	if lp, ok := ctx.Value(ctxKey{}).(*Logger); ok {
 		if lp == l {
 			// Do not store same logger.
 			return ctx
