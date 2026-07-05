@@ -12,11 +12,13 @@ import (
 	"time"
 )
 
+// Output holds template configuration and renders Go templates with parsed data.
 type Output struct {
 	CommonTemplate string
 	Months         map[string][]string
 }
 
+// New creates an Output with an optional common template prefix and month mappings.
 func New(tpl string, months map[string][]string) Output {
 	var o Output
 	o.CommonTemplate = tpl
@@ -24,6 +26,9 @@ func New(tpl string, months map[string][]string) Output {
 	return o
 }
 
+// MonthIndex returns the zero-padded month number (01-12) for the given month
+// name by looking it up in the configured month lists. Returns the input as-is
+// if not found.
 func (o Output) MonthIndex(month string) string {
 	for _, months := range o.Months {
 		for i, data := range months {
@@ -35,6 +40,8 @@ func (o Output) MonthIndex(month string) string {
 	return month
 }
 
+// FromTemplate renders the output template (prefixed with CommonTemplate if set)
+// using the provided variables and returns the result as a string.
 func (o Output) FromTemplate(tmpl string, vars map[string]any) (string, error) {
 	l := logger.Get()
 	funcMap := template.FuncMap{

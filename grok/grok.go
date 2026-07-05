@@ -9,10 +9,12 @@ import (
 	"github.com/logrusorgru/grokky"
 )
 
+// Grok wraps a grokky host to compile and match grok patterns against text.
 type Grok struct {
 	Host grokky.Host
 }
 
+// New creates a Grok instance and registers the given named patterns.
 func New(patterns map[string]string) Grok {
 	var g Grok
 	g.Host = grokky.New()
@@ -22,6 +24,8 @@ func New(patterns map[string]string) Grok {
 	return g
 }
 
+// ParseAll applies each grok pattern in order and merges all named captures
+// into a single result map. Returns nil if no pattern matched.
 func (g *Grok) ParseAll(grokPatterns []string, text string) (map[string]string, error) {
 	var result = make(map[string]string)
 	l := logger.Get()
@@ -42,6 +46,7 @@ func (g *Grok) ParseAll(grokPatterns []string, text string) (map[string]string, 
 	return result, nil
 }
 
+// Parse compiles a single grok pattern and extracts named captures from text.
 func (g *Grok) Parse(grokPattern, text string) (map[string]string, error) {
 	l := logger.Get()
 	l.Debug("Testing pattern", "pattern", grokPattern, "text", text)

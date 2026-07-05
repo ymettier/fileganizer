@@ -5,6 +5,8 @@ import (
 	"testing"
 )
 
+// UseTempDir creates a temporary directory and changes the working directory to
+// it. The original directory is restored via t.Cleanup.
 func UseTempDir(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()

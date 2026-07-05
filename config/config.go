@@ -53,6 +53,7 @@ func printVersion(version string) string {
 	return output
 }
 
+// CLIFlags holds the parsed command-line flag values.
 type CLIFlags struct {
 	ConfigFile string
 	InputFile  string
@@ -96,12 +97,16 @@ func parseFlags(version string) CLIFlags {
 	}
 }
 
+// FileDescription describes a document type to match, including the grok patterns
+// to extract fields and the Go template to produce the output command.
 type FileDescription struct {
 	Name     string
 	Patterns []string
 	Output   string
 }
 
+// Config holds all configuration values for the application, merging CLI flags,
+// YAML config file, and environment variable overrides.
 type Config struct {
 	InputFile          string
 	TextOutput         bool
@@ -114,6 +119,8 @@ type Config struct {
 	ExtractTextCommand []string
 }
 
+// New parses CLI flags and the YAML configuration file, returning a fully
+// populated Config. It exits on missing required flags or config errors.
 func New(version string) (Config, error) {
 	flags := parseFlags(version)
 	var cfg Config

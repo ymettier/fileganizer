@@ -23,10 +23,13 @@ var (
 	logger *Logger
 )
 
+// Logger wraps slog.Logger to provide a singleton logging instance with optional
+// log rotation via lumberjack.
 type Logger struct {
 	*slog.Logger
 }
 
+// LogOptions controls the logger output format, level, destination, and rotation.
 type LogOptions struct {
 	JSON       bool
 	Level      string

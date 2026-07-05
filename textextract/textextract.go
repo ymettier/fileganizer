@@ -12,6 +12,8 @@ import (
 
 const templateFileName = "FILENAME"
 
+// TextExtract runs an external command to extract text from a file. The special
+// token "FILENAME" in the command arguments is replaced with the actual filename.
 func TextExtract(ctx context.Context, filename string, command []string) (string, error) {
 	l := logger.Get()
 	l.Debug("ExtractTextCommand", "command", command)

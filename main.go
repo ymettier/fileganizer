@@ -18,6 +18,7 @@ import (
 	_ "embed"
 )
 
+// Version contains the build version string, set at compile time via version.txt.
 var (
 	Version string = strings.TrimSpace(version)
 	//go:embed version.txt
