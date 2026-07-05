@@ -26,6 +26,8 @@ var (
 )
 
 func run() error {
+	ctx := context.Background()
+
 	cfg, err := config.New(Version)
 	if err != nil {
 		if errors.Is(err, config.ErrVersionRequested) {
@@ -34,7 +36,7 @@ func run() error {
 		return err
 	}
 
-	txt, err := textextract.TextExtract(context.Background(), cfg.InputFile, cfg.ExtractTextCommand)
+	txt, err := textextract.TextExtract(ctx, cfg.InputFile, cfg.ExtractTextCommand)
 	if err != nil {
 		return err
 	}
@@ -62,7 +64,7 @@ func run() error {
 			continue
 		}
 		if cfg.NoDryRun {
-			out, err := exec.CommandContext(context.Background(), "bash", "-c", outputResult).Output()
+			out, err := exec.CommandContext(ctx, "bash", "-c", outputResult).CombinedOutput()
 			fmt.Printf("%s", string(out))
 			if err != nil {
 				return err
