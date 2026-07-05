@@ -7,21 +7,19 @@ import (
 	"fileganizer/logger"
 	"fmt"
 	"os"
-	"reflect"
 	"runtime/debug"
 	"strings"
 	"time"
 
-	"github.com/alecthomas/kong"
-	yaml "gopkg.in/yaml.v3"
+	"github.com/knadh/koanf/parsers/yaml"
+	"github.com/knadh/koanf/providers/file"
+	"github.com/knadh/koanf/v2"
+	flag "github.com/spf13/pflag"
 )
-
-type VersionFlag bool
 
 func printVersion(version string) string {
 	output := fmt.Sprintf("%-15s: %s\n", "Version", version)
 
-	// Get and print additionnal build info
 	var lastCommit time.Time
 	revision := "unknown"
 	dirtyBuild := true
@@ -52,21 +50,6 @@ func printVersion(version string) string {
 	return output
 }
 
-func (v VersionFlag) BeforeReset(version string) error {
-	output := printVersion(version)
-	fmt.Printf("%s", output)
-	os.Exit(0)
-	return nil
-}
-
-type CLI struct {
-	InputFile  string      `name:"file" short:"f" required:"" help:"File to scan"`
-	ConfigFile string      `name:"config" short:"c" required:"" help:"Configuration file"`
-	TextOutput bool        `name:"text-output" short:"t" default:"false" optional:"" help:"Show extracted text"`
-	NoDryRun   bool        `name:"run" short:"r" default:"false" optional:"" help:"No Dry run with output of the command. Really run it !"`
-	Version    VersionFlag `name:"version" short:"V"  help:"Show version info"`
-}
-
 type FileDescription struct {
 	Name     string
 	Patterns []string
@@ -86,126 +69,120 @@ type Config struct {
 }
 
 func New(version string) (Config, error) {
-	var cli CLI
-	kong.Parse(&cli, kong.Bind(version))
 	var cfg Config
-	cfg.InputFile = cli.InputFile
-	cfg.TextOutput = cli.TextOutput
-	cfg.NoDryRun = cli.NoDryRun
 
-	err := cfg.readConfig(cli.ConfigFile)
+	f := flag.NewFlagSet("fileganizer", flag.ContinueOnError)
+	configFile := f.StringP("config", "c", "", "Configuration file")
+	inputFile := f.StringP("file", "f", "", "File to scan")
+	textOutput := f.BoolP("text-output", "t", false, "Show extracted text")
+	noDryRun := f.BoolP("run", "r", false, "No Dry run with output of the command. Really run it !")
+	showVersion := f.BoolP("version", "V", false, "Show version info")
+
+	f.Parse(os.Args[1:])
+
+	if *showVersion {
+		fmt.Print(printVersion(version))
+		os.Exit(0)
+	}
+
+	if *configFile == "" {
+		return cfg, fmt.Errorf("--config/-c is required")
+	}
+	if *inputFile == "" {
+		return cfg, fmt.Errorf("--file/-f is required")
+	}
+
+	cfg.InputFile = *inputFile
+	cfg.TextOutput = *textOutput
+	cfg.NoDryRun = *noDryRun
+
+	err := cfg.readConfig(*configFile)
 	if err != nil {
 		return cfg, err
+	}
+
+	if len(cfg.ExtractTextCommand) == 0 {
+		return cfg, fmt.Errorf("ExtractTextCommand is required in configuration file")
 	}
 
 	return cfg, nil
 }
 
-func (c *Config) readConfig(filename string) error { //nolint:unparam // Functions should return an error even if always nil.
-	var data map[string]any
+func (c *Config) readConfig(filename string) error {
 	l := logger.Get()
-	yamlFile, err := os.ReadFile(filename)
+
+	k := koanf.New(".")
+
+	err := k.Load(file.Provider(filename), yaml.Parser())
 	if err != nil {
-		l.Error("Could not read configuration file", "file", filename, "error", err)
+		l.Error("Could not read or parse configuration file", "file", filename, "error", err)
 		return err
 	}
-
-	err = yaml.Unmarshal(yamlFile, &data)
-	if err != nil {
-		l.Error("Could not parse configuration file", "file", filename, "error", err)
-		return err
-	}
-
-	// Configuration file format
-	//
-	// ExtractTextCommand: ["pdftotext", "-nopgbrk", "-enc", "UTF-8", "FILENAME", "-"]
-	//
-	// env:
-	//   - ENV_VAR_1
-	//   - ENV_VAR_2
-	//
-	// commonTemplate: ""
-	//
-	// months:
-	//   MONTHSFRENCH: [
-	//     "janvier", "février", "mars", "avril", "mai", "juin",
-	//     "juillet", "aout", "septembre", "octobre", "novembre", "décembre"
-	//    ]
-	//
-	// grokPatterns:
-	//   YEAR: "(?:\d\d){1,2}"
-	//   MONTHNUM2: "0[1-9]|1[0-2]"
-	//   MONTHDAY: "(?:0[1-9])|(?:[12][0-9])|(?:3[01])|[1-9]"
-	//   HOUR: "2[0123]|[01]?[0-9]"
-	//   MINUTE: "[0-5][0-9]"
-	//   SECOND: "(?:[0-5]?[0-9]|60)(?:[:.,][0-9]+)?"
-	//   TIMEZONE: "Z%{HOUR}:%{MINUTE}"
-	//   DATE: "%{YEAR:year}-%{MONTHNUM2:month}-%{MONTHDAY:day}"
-	//   TIME: "%{HOUR:hour}:%{MINUTE:min}:%{SECOND:sec}"
-	//
-	// fileDescriptions:
-	//   <type>:
-	//     patterns:
-	//       - "pattern1"
-	//       - "pattern2"
-	//     output: "output string with patterns"
 
 	// parse ExtractTextCommand
-	c.ExtractTextCommand = make([]string, 0)
-	for _, e := range data["ExtractTextCommand"].([]any) {
-		c.ExtractTextCommand = append(c.ExtractTextCommand, e.(string))
-	}
+	c.ExtractTextCommand = k.Strings("ExtractTextCommand")
 
 	// parse env
 	c.EnvVars = make(map[string]string)
-	if _, ok := data["env"]; ok {
-		if reflect.TypeOf(data["env"]) != nil && reflect.TypeOf(data["env"]).String() == "[]interface {}" {
-			for _, e := range data["env"].([]any) {
-				val, ok := os.LookupEnv(e.(string))
-				if !ok {
-					l.Error("Environment variable (from configuration file) is not set", "name", e.(string))
-					return fmt.Errorf("environment variable (from configuration file) is not set: %s", e.(string))
-				}
-				c.EnvVars[e.(string)] = val
+	if envList := k.Strings("env"); len(envList) > 0 {
+		for _, e := range envList {
+			val, ok := os.LookupEnv(e)
+			if !ok {
+				l.Error("Environment variable (from configuration file) is not set", "name", e)
+				return fmt.Errorf("environment variable (from configuration file) is not set: %s", e)
 			}
+			c.EnvVars[e] = val
 		}
 	}
 
 	// parse commonTemplate
-	c.CommonTemplate = data["commonTemplate"].(string)
+	c.CommonTemplate = k.String("commonTemplate")
 
 	// parse months
-	const nbMonths = 12
-	c.Months = make(map[string][]string)
-	for k, v := range data["months"].(map[string]any) {
-		c.Months[k] = make([]string, 0, nbMonths)
-		for _, m := range v.([]any) {
-			c.Months[k] = append(c.Months[k], m.(string))
+	if k.Exists("months") {
+		var months map[string][]string
+		if err := k.Unmarshal("months", &months); err != nil {
+			l.Error("Could not parse months configuration", "error", err)
+			return err
 		}
+		c.Months = months
+	}
+	if c.Months == nil {
+		c.Months = make(map[string][]string)
 	}
 
 	// parse grokPatterns
 	c.GrokPatterns = make(map[string]string)
-	for k, v := range data["grokPatterns"].(map[string]any) {
-		c.GrokPatterns[k] = v.(string)
+	for key, val := range k.StringMap("grokPatterns") {
+		c.GrokPatterns[key] = val
 	}
 	// append months patterns to GrokPatterns
-	for k, months := range c.Months {
-		c.GrokPatterns[k] = "(" + strings.Join(months, "|") + ")"
+	for key, months := range c.Months {
+		c.GrokPatterns[key] = "(" + strings.Join(months, "|") + ")"
 	}
 
 	// parse fileDescriptions
 	c.FileDescriptions = make([]FileDescription, 0)
-	for k, v := range data["fileDescriptions"].(map[string]any) {
-		var d FileDescription
-		d.Name = k
-		d.Patterns = make([]string, 0)
-		fd := v.(map[string]any)
-		for _, p := range fd["patterns"].([]any) {
-			d.Patterns = append(d.Patterns, p.(string))
+	if fdRaw := k.Get("fileDescriptions"); fdRaw != nil {
+		if fdMap, ok := fdRaw.(map[string]any); ok {
+			for name, v := range fdMap {
+				var d FileDescription
+				d.Name = name
+				if entry, ok := v.(map[string]any); ok {
+					if patterns, ok := entry["patterns"].([]any); ok {
+						d.Patterns = make([]string, 0, len(patterns))
+						for _, p := range patterns {
+							d.Patterns = append(d.Patterns, fmt.Sprintf("%v", p))
+						}
+					}
+					if output, ok := entry["output"].(string); ok {
+						d.Output = output
+					}
+				}
+				c.FileDescriptions = append(c.FileDescriptions, d)
+			}
 		}
-		d.Output = fd["output"].(string)
-		c.FileDescriptions = append(c.FileDescriptions, d)
 	}
+
 	return nil
 }
