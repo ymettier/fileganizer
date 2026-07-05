@@ -1,51 +1,59 @@
-// Copyright 2023 The Fileganizer Authors. All rights reserved.
+// Copyright 2023-2026 The Fileganizer Authors. All rights reserved.
 // SPDX-License-Identifier: MIT
 
 package main
 
 import (
 	"context"
-	"fileganizer/config"
-	"fileganizer/grok"
-	"fileganizer/logger"
-	"fileganizer/output"
-	"fileganizer/textextract"
+	_ "embed"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
 
-	_ "embed"
+	"fileganizer/config"
+	"fileganizer/grok"
+	"fileganizer/logger"
+	"fileganizer/output"
+	"fileganizer/textextract"
 )
 
+// Version contains the build version string, set at compile time via version.txt.
 var (
 	Version string = strings.TrimSpace(version)
 	//go:embed version.txt
 	version string
 )
 
-func main() {
-	l := logger.Get()
+func run() error {
+	ctx := context.Background()
 
 	cfg, err := config.New(Version)
 	if err != nil {
-		os.Exit(1)
+		if errors.Is(err, config.ErrVersionRequested) {
+			return nil
+		}
+		return err
 	}
 
-	txt, err := textextract.TextExtract(context.Background(), cfg.InputFile, cfg.ExtractTextCommand)
+	txt, err := textextract.TextExtract(ctx, cfg.InputFile, cfg.ExtractTextCommand)
 	if err != nil {
-		os.Exit(1)
+		return err
 	}
 	if cfg.TextOutput {
 		fmt.Printf("%v\n", txt)
-		os.Exit(0)
+		return nil
 	}
-	g := grok.New(cfg.GrokPatterns)
+	g, err := grok.New(cfg.GrokPatterns)
+	if err != nil {
+		return err
+	}
 	o := output.New(cfg.CommonTemplate, cfg.Months)
 	for _, fd := range cfg.FileDescriptions {
 		r, err := g.ParseAll(fd.Patterns, txt)
 		if err != nil {
-			os.Exit(1)
+			return err
 		}
 		if r == nil {
 			continue
@@ -57,17 +65,25 @@ func main() {
 		}
 		outputResult, err := o.FromTemplate(fd.Output, values)
 		if err != nil {
+			logger.Get().Debug("Silently skipping template", "output", fd.Output, "error", err)
 			continue
 		}
 		if cfg.NoDryRun {
-			run, err := exec.CommandContext(context.Background(), "bash", "-c", outputResult).Output()
-			fmt.Printf("%s", string(run))
+			out, err := exec.CommandContext(ctx, "bash", "-c", outputResult).CombinedOutput()
+			fmt.Printf("%s", string(out))
 			if err != nil {
-				l.Fatal("Run output command", "command output", string(run), "error", err)
-				os.Exit(1)
+				return err
 			}
 		} else {
 			fmt.Printf("%s", outputResult)
 		}
+	}
+	return nil
+}
+
+func main() {
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
 	}
 }

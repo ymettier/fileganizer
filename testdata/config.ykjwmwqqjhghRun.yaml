@@ -1,0 +1,18 @@
+---
+ExtractTextCommand: ["cat", "FILENAME"]
+
+months:
+  MONTHSENGLISH: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+
+grokPatterns:
+  NUMBER: '[0-9]+'
+  STRING: '\\w+'
+  JUSTMATCH: '.*'
+
+commonTemplate: ""
+
+fileDescriptions:
+  test:
+    patterns:
+      - "%{JUSTMATCH:matched}Company Foo,"
+    output: "echo 'run mode works'"

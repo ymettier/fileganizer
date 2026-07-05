@@ -5,3 +5,5 @@ TODO
 textextract/logs/
 dist/
 version.txt
+coverage*.out
+coverage.html

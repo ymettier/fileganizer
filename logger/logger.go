@@ -1,4 +1,4 @@
-// Copyright 2023 The Fileganizer Authors. All rights reserved.
+// Copyright 2023-2026 The Fileganizer Authors. All rights reserved.
 // SPDX-License-Identifier: MIT
 
 package logger
@@ -10,105 +10,160 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"syscall"
+
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 type ctxKey struct{}
 
-var once sync.Once
+var (
+	mu     sync.RWMutex
+	logger *Logger
+)
 
-var logger *Logger
-
+// Logger wraps slog.Logger to provide a singleton logging instance with optional
+// log rotation via lumberjack.
 type Logger struct {
 	*slog.Logger
 }
 
-func (l *Logger) Fatal(msg string, args ...any) {
-	l.Error(msg, args...)
-	os.Exit(1)
+// LogOptions controls the logger output format, level, destination, and rotation.
+type LogOptions struct {
+	JSON       bool
+	Level      string
+	Filename   string
+	MaxSize    int
+	MaxBackups int
+	MaxAge     int
+	Compress   bool
 }
 
-// Loggers are defined with these environment variables:
-// - LOG_TXT_FILENAME
-//
-// The value can be either "stdout", "stderr" or a filename.
-//
-// LOG_LEVEL environment variable sets the log level.
-func newLogger() *Logger {
+// getWriter returns an io.Writer and whether lumberjack rotation is being used.
+func getWriter(opts *LogOptions) (io.Writer, bool) {
+	filename := ""
+	if opts != nil && opts.Filename != "" {
+		filename = opts.Filename
+	}
+
+	if filename == "" {
+		return os.Stderr, false
+	}
+
+	switch filename {
+	case "stdout":
+		return os.Stdout, false
+	case "stderr": //nolint:goconst
+		return os.Stderr, false
+	}
+
+	l := &lumberjack.Logger{
+		Filename: filename,
+	}
+	if opts != nil {
+		l.MaxSize = opts.MaxSize
+		l.MaxBackups = opts.MaxBackups
+		l.MaxAge = opts.MaxAge
+		l.Compress = opts.Compress
+	} else {
+		l.MaxSize = 5
+		l.MaxBackups = 10
+		l.MaxAge = 14
+		l.Compress = true
+	}
+	return l, true
+}
+
+// newLogger creates a new logger based on opts or environment variables if opts is nil.
+func newLogger(opts *LogOptions) *Logger {
 	// Define log level
 	level := slog.LevelInfo
-	levelEnv := os.Getenv("LOG_LEVEL")
-	if levelEnv != "" {
+	var levelStr string
+	if opts != nil && opts.Level != "" {
+		levelStr = opts.Level
+	} else {
+		levelStr = os.Getenv("FILEGANIZER_LOGGING_LEVEL")
+	}
+
+	if levelStr != "" {
 		var l slog.Level
-		if err := l.UnmarshalText([]byte(strings.ToUpper(levelEnv))); err != nil {
-			slog.Warn("invalid level, defaulting to INFO", "error", err)
+		if err := l.UnmarshalText([]byte(strings.ToUpper(levelStr))); err != nil {
+			slog.Default().Error("invalid level, defaulting to INFO", "error", err)
 		} else {
 			level = l
 		}
 	}
 
-	opts := &slog.HandlerOptions{
+	handlerOpts := &slog.HandlerOptions{
 		Level: level,
 	}
 
-	// Define log writer
-	var w io.Writer = os.Stderr
-	filename := os.Getenv("LOG_TXT_FILENAME")
-
-	if filename != "" {
-		switch filename {
-		case "stdout":
-			w = os.Stdout
-		case "stderr":
-			w = os.Stderr
-		default:
-			f, err := os.OpenFile(filename, //nolint:gosec // The user specifies the filename in the configuration file.
-				os.O_APPEND|os.O_CREATE|os.O_WRONLY,
-				syscall.S_IRUSR|syscall.S_IWUSR|syscall.S_IRGRP|syscall.S_IROTH,
-			)
-			if err != nil {
-				slog.Warn("failed to open log file, defaulting to stderr", "filename", filename, "error", err)
-			} else {
-				w = f
-			}
-		}
-	}
+	w, usingLumberjack := getWriter(opts)
 
 	// Create new logger
-	return &Logger{slog.New(slog.NewTextHandler(w, opts))}
+	var handler slog.Handler
+	if opts != nil && opts.JSON {
+		handler = slog.NewJSONHandler(w, handlerOpts)
+	} else {
+		handler = slog.NewTextHandler(w, handlerOpts)
+	}
+	l := &Logger{slog.New(handler)}
+
+	if opts != nil {
+		attrs := []any{
+			slog.String("level", opts.Level),
+			slog.String("filename", opts.Filename),
+			slog.Bool("json", opts.JSON),
+		}
+		if usingLumberjack {
+			attrs = append(attrs,
+				slog.Int("maxSize", opts.MaxSize),
+				slog.Int("maxBackups", opts.MaxBackups),
+				slog.Int("maxAge", opts.MaxAge),
+				slog.Bool("compress", opts.Compress),
+			)
+		}
+		l.Info("Logger configuration", attrs...)
+	}
+
+	return l
 }
 
 // Get initializes a Logger instance if it has not been initialized
 // already and returns the same instance for subsequent calls.
 func Get() *Logger {
-	once.Do(func() {
-		logger = newLogger()
-	})
+	mu.RLock()
+	l := logger
+	mu.RUnlock()
 
-	return logger
-}
-
-// FromCtx returns the Logger associated with the ctx. If no logger
-// is associated, the default logger is returned, unless it is nil
-// in which case a disabled logger is returned.
-func FromCtx(ctx context.Context) *Logger {
-	if l, ok := ctx.Value(ctxKey{}).(*Logger); ok {
-		return l
-	} else if l := logger; l != nil {
+	if l != nil {
 		return l
 	}
 
-	return &Logger{slog.New(slog.NewTextHandler(io.Discard, nil))}
+	mu.Lock()
+	defer mu.Unlock()
+	if logger == nil {
+		logger = newLogger(nil)
+	}
+	return logger
+}
+
+// Reset re-initializes the global logger with the provided options.
+func Reset(opts *LogOptions) {
+	mu.Lock()
+	defer mu.Unlock()
+	logger = newLogger(opts)
+}
+
+// FromCtx returns the Logger associated with the ctx. If no logger
+// is associated, the default logger is returned.
+func FromCtx(ctx context.Context) *Logger {
+	if l, ok := ctx.Value(ctxKey{}).(*Logger); ok {
+		return l
+	}
+	return Get()
 }
 
 // WithCtx returns a copy of ctx with the Logger attached.
 func WithCtx(ctx context.Context, l *Logger) context.Context {
-	if lp, ok := ctx.Value(ctxKey{}).(*Logger); ok {
-		if lp == l {
-			// Do not store same logger.
-			return ctx
-		}
-	}
-
 	return context.WithValue(ctx, ctxKey{}, l)
 }

@@ -1,16 +1,13 @@
-// Copyright 2023 The Fileganizer Authors. All rights reserved.
+// Copyright 2023-2026 The Fileganizer Authors. All rights reserved.
 // SPDX-License-Identifier: MIT
 
 package output
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
-
-var logFilename = "output.log"
 
 var months = map[string][]string{
 	"French": {"Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Aout", "Septembre", "Octobre", "Novembre", "Décembre"},
@@ -47,11 +44,30 @@ func TestFromTemplateWithCommonTemplate(t *testing.T) {
 }
 
 func TestFromTemplateWithBrokenTemplate(t *testing.T) {
-	os.Setenv("LOG_TXT_FILENAME", logFilename)
-	defer os.Unsetenv("LOG_TXT_FILENAME")
-	defer os.Remove(logFilename)
 	o := New("year {{ .year }}", months)
 
 	_, err := o.FromTemplate("{{", vars)
 	assert.Error(t, err)
+}
+
+func TestFromTemplate_ExecuteError(t *testing.T) {
+	o := New("", nil)
+
+	// ToUpper expects a string; passing an int causes a type error at execution
+	_, err := o.FromTemplate("{{ ToUpper 42 }}", nil)
+	assert.Error(t, err)
+}
+
+func TestMonthIndex_NoMatch(t *testing.T) {
+	o := New("", nil)
+
+	result := o.MonthIndex("NotAMonth")
+	assert.Equal(t, "NotAMonth", result)
+}
+
+func TestMonthIndex_EmptyMonths(t *testing.T) {
+	o := New("", map[string][]string{})
+
+	result := o.MonthIndex("January")
+	assert.Equal(t, "January", result)
 }

@@ -1,4 +1,15 @@
 ---
+# Logging configuration (optional). Defaults to INFO level on stdout.
+# Valid filename values: "stdout", "stderr", or a file path (enables rotation).
+# logging:
+#   level: INFO
+#   filename: stdout
+#   maxSize: 5
+#   maxBackups: 10
+#   maxAge: 14
+#   compress: true
+#   json: false
+
 # ExtractTextCommand describes the command to extract text from a file (like a pdf file). The special string "FILENAME" will be replaced with the real file name.
 # Examples :
 #   ExtractTextCommand: ["pdftotext", "-nopgbrk", "-enc", "UTF-8", "FILENAME", "-"]
