@@ -44,7 +44,10 @@ func run() error {
 		fmt.Printf("%v\n", txt)
 		return nil
 	}
-	g := grok.New(cfg.GrokPatterns)
+	g, err := grok.New(cfg.GrokPatterns)
+	if err != nil {
+		return err
+	}
 	o := output.New(cfg.CommonTemplate, cfg.Months)
 	for _, fd := range cfg.FileDescriptions {
 		r, err := g.ParseAll(fd.Patterns, txt)

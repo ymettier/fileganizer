@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const contents = "Some text\n" +
@@ -37,12 +38,14 @@ var patternsNotMatching = []string{
 }
 
 func TestNew(t *testing.T) {
-	g := New(grokPatterns)
+	g, err := New(grokPatterns)
+	assert.NoError(t, err)
 	assert.Equal(t, len(grokPatterns), len(g.host))
 }
 
 func TestParseOK(t *testing.T) {
-	g := New(grokPatterns)
+	g, err := New(grokPatterns)
+	require.NoError(t, err)
 
 	for _, p := range patternsMatching {
 		r, err := g.Parse(p, contents)
@@ -52,7 +55,8 @@ func TestParseOK(t *testing.T) {
 }
 
 func TestParseNothing(t *testing.T) {
-	g := New(grokPatterns)
+	g, err := New(grokPatterns)
+	require.NoError(t, err)
 	for _, p := range patternsNotMatching {
 		r, err := g.Parse(p, contents)
 		assert.NoErrorf(t, err, "Fails on pattern '%s' with error %v", p, err)
@@ -61,7 +65,8 @@ func TestParseNothing(t *testing.T) {
 }
 
 func TestParseAllOK(t *testing.T) {
-	g := New(grokPatterns)
+	g, err := New(grokPatterns)
+	require.NoError(t, err)
 
 	r, err := g.ParseAll(patternsMatching, contents)
 	assert.NoError(t, err)
@@ -72,7 +77,8 @@ func TestParseAllOK(t *testing.T) {
 }
 
 func TestParseAllNothing(t *testing.T) {
-	g := New(grokPatterns)
+	g, err := New(grokPatterns)
+	require.NoError(t, err)
 
 	r, err := g.ParseAll(patternsNotMatching, contents)
 	assert.NoError(t, err)

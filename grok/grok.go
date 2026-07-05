@@ -15,13 +15,15 @@ type Grok struct {
 }
 
 // New creates a Grok instance and registers the given named patterns.
-func New(patterns map[string]string) Grok {
+func New(patterns map[string]string) (Grok, error) {
 	var g Grok
 	g.host = grokky.New()
 	for k, p := range patterns {
-		g.host.Must(k, p)
+		if err := g.host.Add(k, p); err != nil {
+			return g, err
+		}
 	}
-	return g
+	return g, nil
 }
 
 // ParseAll applies each grok pattern in order and merges all named captures
