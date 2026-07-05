@@ -22,7 +22,7 @@ Fileganizer is a Go CLI tool that processes documents through a pipeline: text e
   // Copyright 2023 The Fileganizer Authors. All rights reserved.
   // SPDX-License-Identifier: MIT
   ```
-- Copyright header header: replace the year with the current year
+- Copyright year is always 2023-XXXX (project founding year to the present)
 - All public functions should have documentation comments
 - Keep functions focused and under 50 lines when possible
 - Use meaningful variable names
