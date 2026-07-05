@@ -58,11 +58,11 @@ var ErrVersionRequested = errors.New("version requested")
 
 // cliFlags holds the parsed command-line flag values.
 type cliFlags struct {
-	ConfigFile   string
-	InputFile    string
-	TextOutput   bool
-	NoDryRun     bool
-	ShowVersion  bool
+	ConfigFile  string
+	InputFile   string
+	TextOutput  bool
+	NoDryRun    bool
+	ShowVersion bool
 }
 
 func parseFlags(args []string) (cliFlags, error) {
@@ -236,10 +236,11 @@ func (c *Config) loadYAML(filename string) (*koanf.Koanf, error) {
 }
 
 func (c *Config) parseExtractTextCommand(k *koanf.Koanf) error {
-	c.ExtractTextCommand, _ = lookupConfigStrings(k, "ExtractTextCommand")
-	if len(c.ExtractTextCommand) == 0 {
-		return fmt.Errorf("ExtractTextCommand is required in configuration file")
+	cmd, ok := lookupConfigStrings(k, "ExtractTextCommand")
+	if !ok || len(cmd) == 0 {
+		return fmt.Errorf("ExtractTextCommand is required (and not empty) in configuration file")
 	}
+	c.ExtractTextCommand = cmd
 	return nil
 }
 
