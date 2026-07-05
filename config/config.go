@@ -12,8 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"log/slog"
-
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/providers/file"
@@ -66,7 +64,7 @@ type CLIFlags struct {
 	ShowVersion  bool
 }
 
-func parseFlags(version string) (CLIFlags, error) {
+func parseFlags(version string, args []string) (CLIFlags, error) {
 	fs := pflag.NewFlagSet("fileganizer", pflag.ContinueOnError)
 
 	configFile := fs.StringP("config", "c", "", "Configuration file")
@@ -75,7 +73,7 @@ func parseFlags(version string) (CLIFlags, error) {
 	noDryRun := fs.BoolP("run", "r", false, "No Dry run with output of the command. Really run it !")
 	showVersion := fs.BoolP("version", "V", false, "Show version info")
 
-	if err := fs.Parse(os.Args[1:]); err != nil {
+	if err := fs.Parse(args); err != nil {
 		return CLIFlags{}, fmt.Errorf("error parsing flags: %w", err)
 	}
 
@@ -123,7 +121,7 @@ type Config struct {
 // New parses CLI flags and the YAML configuration file, returning a fully
 // populated Config. It returns ErrVersionRequested when --version is passed.
 func New(version string) (Config, error) {
-	flags, err := parseFlags(version)
+	flags, err := parseFlags(version, os.Args[1:])
 	if err != nil {
 		return Config{}, err
 	}
@@ -138,10 +136,12 @@ func New(version string) (Config, error) {
 	cfg.TextOutput = flags.TextOutput
 	cfg.NoDryRun = flags.NoDryRun
 
-	err = cfg.readConfig(flags.ConfigFile)
+	logOpts, err := cfg.readConfig(flags.ConfigFile)
 	if err != nil {
 		return cfg, err
 	}
+
+	logger.Reset(&logOpts)
 
 	return cfg, nil
 }
@@ -214,13 +214,13 @@ func lookupConfigMapKeys(k *koanf.Koanf, camelKey string) []string {
 	return nil
 }
 
-func (c *Config) readConfig(filename string) error {
-	l := logger.Get()
+func (c *Config) readConfig(filename string) (logger.LogOptions, error) {
+	logOpts := logger.LogOptions{}
 
 	k := koanf.New(".")
 
 	if err := k.Load(file.Provider(filename), yaml.Parser()); err != nil {
-		return fmt.Errorf("failed to read configuration file %s: %w", filename, err)
+		return logOpts, fmt.Errorf("failed to read configuration file %s: %w", filename, err)
 	}
 
 	if err := k.Load(env.Provider("FILEGANIZER_", ".", func(s string) string {
@@ -229,16 +229,14 @@ func (c *Config) readConfig(filename string) error {
 		s = strings.ReplaceAll(s, "_", ".")
 		return s
 	}), nil); err != nil {
-		return fmt.Errorf("failed to load environment variables: %w", err)
+		return logOpts, fmt.Errorf("failed to load environment variables: %w", err)
 	}
 
-	logOpts := loggerConfig(k)
-	logger.Reset(&logOpts)
-	l = logger.Get()
+	logOpts = loggerConfig(k)
 
 	c.ExtractTextCommand, _ = lookupConfigStrings(k, "ExtractTextCommand")
 	if len(c.ExtractTextCommand) == 0 {
-		return fmt.Errorf("ExtractTextCommand is required in configuration file")
+		return logOpts, fmt.Errorf("ExtractTextCommand is required in configuration file")
 	}
 
 	c.EnvVars = make(map[string]string)
@@ -246,8 +244,7 @@ func (c *Config) readConfig(filename string) error {
 	for _, name := range envList {
 		val, ok := os.LookupEnv(name)
 		if !ok {
-			l.Error("Environment variable (from configuration file) is not set", slog.String("name", name))
-			return fmt.Errorf("environment variable (from configuration file) is not set: %s", name)
+			return logOpts, fmt.Errorf("environment variable (from configuration file) is not set: %s", name)
 		}
 		c.EnvVars[name] = val
 	}
@@ -290,10 +287,5 @@ func (c *Config) readConfig(filename string) error {
 		c.FileDescriptions = append(c.FileDescriptions, d)
 	}
 
-	l.Info("Configuration loaded",
-		slog.String("file", filename),
-		slog.Int("fileDescriptions", len(c.FileDescriptions)),
-	)
-
-	return nil
+	return logOpts, nil
 }
