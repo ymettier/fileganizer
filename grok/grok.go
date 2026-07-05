@@ -25,7 +25,8 @@ func New(patterns map[string]string) Grok {
 }
 
 // ParseAll applies each grok pattern in order and merges all named captures
-// into a single result map. Returns nil if no pattern matched.
+// into a single result map. All patterns must match on the text; the first
+// non-matching pattern aborts the entire set and returns nil.
 func (g *Grok) ParseAll(grokPatterns []string, text string) (map[string]string, error) {
 	var result = make(map[string]string)
 	for _, p := range grokPatterns {
