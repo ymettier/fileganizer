@@ -132,7 +132,7 @@ func New(version string) (Config, error) {
 func loggerConfig(k *koanf.Koanf) logger.LogOptions {
 	logOpts := logger.LogOptions{
 		Level:      "INFO",
-		Filename:   "",
+		Filename:   "stdout",
 		MaxSize:    5,
 		MaxBackups: 10,
 		MaxAge:     14,
@@ -215,11 +215,9 @@ func (c *Config) readConfig(filename string) error {
 		return fmt.Errorf("failed to load environment variables: %w", err)
 	}
 
-	if k.Exists("logging") {
-		logOpts := loggerConfig(k)
-		logger.Reset(&logOpts)
-		l = logger.Get()
-	}
+	logOpts := loggerConfig(k)
+	logger.Reset(&logOpts)
+	l = logger.Get()
 
 	c.ExtractTextCommand, _ = lookupConfigStrings(k, "ExtractTextCommand")
 	if len(c.ExtractTextCommand) == 0 {

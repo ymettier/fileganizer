@@ -33,7 +33,7 @@ func TestFileykjwmwqqjhght(t *testing.T) {
 		return nil
 	})
 	assert.Nil(t, err)
-	assert.Equal(t, output, "Invoice Summary\n  date: 2014-03-27\n  number: 001\n")
+	assert.Contains(t, output, "Invoice Summary\n  date: 2014-03-27\n  number: 001\n")
 }
 
 func TestFileykjwmwqqjhghtEnv(t *testing.T) {
@@ -48,5 +48,5 @@ func TestFileykjwmwqqjhghtEnv(t *testing.T) {
 		return nil
 	})
 	assert.Nil(t, err)
-	assert.Equal(t, output, "Invoice magic Summary\n  date: 2014-03-27\n  number: 001\n")
+	assert.Contains(t, output, "Invoice magic Summary\n  date: 2014-03-27\n  number: 001\n")
 }

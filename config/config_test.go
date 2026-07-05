@@ -240,7 +240,7 @@ func TestLoggerConfigDefaults(t *testing.T) {
 	opts := loggerConfig(k)
 
 	assert.Equal(t, "INFO", opts.Level)
-	assert.Equal(t, "", opts.Filename)
+	assert.Equal(t, "stdout", opts.Filename)
 	assert.Equal(t, 5, opts.MaxSize)
 	assert.Equal(t, 10, opts.MaxBackups)
 	assert.Equal(t, 14, opts.MaxAge)
