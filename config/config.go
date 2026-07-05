@@ -266,7 +266,7 @@ func (c *Config) parseMonths(k *koanf.Koanf) {
 	}
 }
 
-func (c *Config) parseGrokPatterns(k *koanf.Koanf) {
+func (c *Config) parseGrokPatterns(k *koanf.Koanf) error {
 	c.GrokPatterns = make(map[string]string)
 	for _, key := range lookupConfigMapKeys(k, "grokPatterns") {
 		prefix := "grokPatterns." + key
@@ -275,8 +275,12 @@ func (c *Config) parseGrokPatterns(k *koanf.Koanf) {
 		}
 	}
 	for key, months := range c.Months {
+		if _, exists := c.GrokPatterns[key]; exists {
+			return fmt.Errorf("month key %q conflicts with existing grok pattern", key)
+		}
 		c.GrokPatterns[key] = "(" + strings.Join(months, "|") + ")"
 	}
+	return nil
 }
 
 func (c *Config) parseFileDescriptions(k *koanf.Koanf) {
@@ -316,7 +320,9 @@ func (c *Config) readConfig(filename string) (logger.LogOptions, error) {
 	}
 
 	c.parseMonths(k)
-	c.parseGrokPatterns(k)
+	if err := c.parseGrokPatterns(k); err != nil {
+		return logOpts, err
+	}
 	c.parseFileDescriptions(k)
 
 	return logOpts, nil
