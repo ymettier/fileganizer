@@ -135,9 +135,7 @@ func TestRunTextOutputFlag(t *testing.T) {
 
 	os.Args = []string{"./fileganizer", "-c", "testdata/config.ykjwmwqqjhgh.yaml", "-f", "testdata/ykjwmwqqjhgh.txt", "-t"}
 
-	output, err := captureOutput(func() error {
-		return run()
-	})
+	output, err := captureOutput(run)
 	assert.NoError(t, err)
 	assert.Contains(t, output, "Invoice")
 }
