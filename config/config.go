@@ -214,13 +214,11 @@ func lookupConfigMapKeys(k *koanf.Koanf, camelKey string) []string {
 	return nil
 }
 
-func (c *Config) readConfig(filename string) (logger.LogOptions, error) {
-	logOpts := logger.LogOptions{}
-
+func (c *Config) loadYAML(filename string) (*koanf.Koanf, error) {
 	k := koanf.New(".")
 
 	if err := k.Load(file.Provider(filename), yaml.Parser()); err != nil {
-		return logOpts, fmt.Errorf("failed to read configuration file %s: %w", filename, err)
+		return nil, fmt.Errorf("failed to read configuration file %s: %w", filename, err)
 	}
 
 	if err := k.Load(env.Provider("FILEGANIZER_", ".", func(s string) string {
@@ -229,30 +227,34 @@ func (c *Config) readConfig(filename string) (logger.LogOptions, error) {
 		s = strings.ReplaceAll(s, "_", ".")
 		return s
 	}), nil); err != nil {
-		return logOpts, fmt.Errorf("failed to load environment variables: %w", err)
+		return nil, fmt.Errorf("failed to load environment variables: %w", err)
 	}
 
-	logOpts = loggerConfig(k)
+	return k, nil
+}
 
+func (c *Config) parseExtractTextCommand(k *koanf.Koanf) error {
 	c.ExtractTextCommand, _ = lookupConfigStrings(k, "ExtractTextCommand")
 	if len(c.ExtractTextCommand) == 0 {
-		return logOpts, fmt.Errorf("ExtractTextCommand is required in configuration file")
+		return fmt.Errorf("ExtractTextCommand is required in configuration file")
 	}
+	return nil
+}
 
+func (c *Config) parseEnvVars(k *koanf.Koanf) error {
 	c.EnvVars = make(map[string]string)
 	envList, _ := lookupConfigStrings(k, "env")
 	for _, name := range envList {
 		val, ok := os.LookupEnv(name)
 		if !ok {
-			return logOpts, fmt.Errorf("environment variable (from configuration file) is not set: %s", name)
+			return fmt.Errorf("environment variable (from configuration file) is not set: %s", name)
 		}
 		c.EnvVars[name] = val
 	}
+	return nil
+}
 
-	if val, ok := lookupConfigString(k, "commonTemplate"); ok {
-		c.CommonTemplate = val
-	}
-
+func (c *Config) parseMonths(k *koanf.Koanf) {
 	c.Months = make(map[string][]string)
 	for _, key := range lookupConfigMapKeys(k, "months") {
 		prefix := "months." + key
@@ -260,7 +262,9 @@ func (c *Config) readConfig(filename string) (logger.LogOptions, error) {
 			c.Months[key] = vals
 		}
 	}
+}
 
+func (c *Config) parseGrokPatterns(k *koanf.Koanf) {
 	c.GrokPatterns = make(map[string]string)
 	for _, key := range lookupConfigMapKeys(k, "grokPatterns") {
 		prefix := "grokPatterns." + key
@@ -271,7 +275,9 @@ func (c *Config) readConfig(filename string) (logger.LogOptions, error) {
 	for key, months := range c.Months {
 		c.GrokPatterns[key] = "(" + strings.Join(months, "|") + ")"
 	}
+}
 
+func (c *Config) parseFileDescriptions(k *koanf.Koanf) {
 	c.FileDescriptions = make([]FileDescription, 0)
 	for _, id := range lookupConfigMapKeys(k, "fileDescriptions") {
 		prefix := "fileDescriptions." + id + "."
@@ -286,6 +292,30 @@ func (c *Config) readConfig(filename string) (logger.LogOptions, error) {
 		}
 		c.FileDescriptions = append(c.FileDescriptions, d)
 	}
+}
+
+func (c *Config) readConfig(filename string) (logger.LogOptions, error) {
+	k, err := c.loadYAML(filename)
+	if err != nil {
+		return logger.LogOptions{}, err
+	}
+
+	logOpts := loggerConfig(k)
+
+	if err := c.parseExtractTextCommand(k); err != nil {
+		return logOpts, err
+	}
+	if err := c.parseEnvVars(k); err != nil {
+		return logOpts, err
+	}
+
+	if val, ok := lookupConfigString(k, "commonTemplate"); ok {
+		c.CommonTemplate = val
+	}
+
+	c.parseMonths(k)
+	c.parseGrokPatterns(k)
+	c.parseFileDescriptions(k)
 
 	return logOpts, nil
 }
