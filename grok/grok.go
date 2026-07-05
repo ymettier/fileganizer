@@ -28,14 +28,13 @@ func New(patterns map[string]string) Grok {
 // into a single result map. Returns nil if no pattern matched.
 func (g *Grok) ParseAll(grokPatterns []string, text string) (map[string]string, error) {
 	var result = make(map[string]string)
-	l := logger.Get()
 	for _, p := range grokPatterns {
 		r, err := g.Parse(p, text)
 		if err != nil {
 			return nil, err
 		}
 		if len(r) == 0 {
-			l.Debug("No pattern matched", "pattern", p)
+			logger.Get().Debug("No pattern matched", "pattern", p)
 			return nil, nil
 		} else {
 			for k, v := range r {
