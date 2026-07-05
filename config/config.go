@@ -20,7 +20,7 @@ import (
 	"fileganizer/logger"
 )
 
-func printVersion(version string) string {
+func formatVersion(version string) string {
 	output := fmt.Sprintf("%-15s: %s\n", "Version", version)
 
 	var lastCommit time.Time
@@ -128,7 +128,7 @@ func New(version string) (Config, error) {
 	}
 
 	if flags.ShowVersion {
-		fmt.Print(printVersion(version))
+		fmt.Print(formatVersion(version))
 		return Config{}, ErrVersionRequested
 	}
 
