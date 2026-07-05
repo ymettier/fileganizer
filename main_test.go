@@ -50,3 +50,60 @@ func TestFileykjwmwqqjhghtEnv(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Contains(t, output, "Invoice magic Summary\n  date: 2014-03-27\n  number: 001\n")
 }
+
+func TestFileNonMatchingPattern(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+
+	os.Args = []string{"./fileganizer", "-c", "testdata/config.ykjwmwqqjhghNoMatch.yaml", "-f", "testdata/ykjwmwqqjhgh.txt"}
+
+	output, err := captureOutput(func() error {
+		main()
+		return nil
+	})
+	assert.Nil(t, err)
+	assert.Contains(t, output, "Invoice Summary\n  date: 2014-03-27\n  number: 001\n")
+	assert.NotContains(t, output, "should not appear")
+}
+
+func TestFileBrokenTemplate(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+
+	os.Args = []string{"./fileganizer", "-c", "testdata/config.ykjwmwqqjhghBrokenTpl.yaml", "-f", "testdata/ykjwmwqqjhgh.txt"}
+
+	output, err := captureOutput(func() error {
+		main()
+		return nil
+	})
+	assert.Nil(t, err)
+	assert.Contains(t, output, "Invoice Summary\n  date: 2014-03-27\n  number: 001\n")
+}
+
+func TestFileRunMode(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+
+	os.Args = []string{"./fileganizer", "-c", "testdata/config.ykjwmwqqjhghRun.yaml", "-f", "testdata/ykjwmwqqjhgh.txt", "-r"}
+
+	output, err := captureOutput(func() error {
+		main()
+		return nil
+	})
+	assert.Nil(t, err)
+	assert.Contains(t, output, "run mode works")
+}
+
+func TestFileFrenchMonths(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+
+	os.Args = []string{"./fileganizer", "-c", "testdata/config.ykjwmwqqjhghFrench.yaml", "-f", "testdata/ykjwmwqqjhghFrench.txt"}
+
+	output, err := captureOutput(func() error {
+		main()
+		return nil
+	})
+	assert.Nil(t, err)
+	assert.Contains(t, output, "08-27-2014")
+}

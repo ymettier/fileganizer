@@ -1,0 +1,18 @@
+---
+ExtractTextCommand: ["cat", "FILENAME"]
+
+months:
+  MONTHSFRENCHLOWERCASE: ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"]
+
+grokPatterns:
+  NUMBER: '[0-9]+'
+  YEAR: "(?:\\d\\d){1,2}"
+  MONTHDAY: "(?:0[1-9])|(?:[12][0-9])|(?:3[01])|[1-9]"
+
+commonTemplate: ""
+
+fileDescriptions:
+  french:
+    patterns:
+      - "%{MONTHSFRENCHLOWERCASE:month} %{MONTHDAY:day}, %{YEAR:year}"
+    output: "{{ MonthIndex .grok.month }}-{{ .grok.day }}-{{ .grok.year }}"
