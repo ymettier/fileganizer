@@ -65,7 +65,7 @@ type cliFlags struct {
 	ShowVersion  bool
 }
 
-func parseFlags(version string, args []string) (cliFlags, error) {
+func parseFlags(args []string) (cliFlags, error) {
 	fs := pflag.NewFlagSet("fileganizer", pflag.ContinueOnError)
 
 	configFile := fs.StringP("config", "c", "", "Configuration file")
@@ -122,7 +122,7 @@ type Config struct {
 // New parses CLI flags and the YAML configuration file, returning a fully
 // populated Config. It returns ErrVersionRequested when --version is passed.
 func New(version string) (Config, error) {
-	flags, err := parseFlags(version, os.Args[1:])
+	flags, err := parseFlags(os.Args[1:])
 	if err != nil {
 		return Config{}, err
 	}
