@@ -50,6 +50,7 @@ Fileganizer is a Go CLI tool that processes documents through a pipeline: text e
 - Environment variable names should be in uppercase with underscores (e.g., `FILEGANIZER_LOGGING_LEVEL`)
 - Environment variables should be documented in the `config.yaml.sample`
 - Environment variables should be prefixed with `FILEGANIZER_` (e.g., `FILEGANIZER_DIR`, `FILEGANIZER_LOGGING_LEVEL`)
+- The environment variables defined in `config.yaml.sample` with key `env` are not related to the configuration management. They are used to set environment variables for the application. They are not supposed to be prefixed with `FILEGANIZER_`.
 
 ### Error Handling
 - Use slog for error logging with context
