@@ -1,0 +1,13 @@
+---
+ExtractTextCommand: ["cat", "FILENAME"]
+
+grokPatterns:
+  NUMBER: '[0-9]+'
+
+commonTemplate: ""
+
+fileDescriptions:
+  broken:
+    patterns:
+      - "%{NONEXISTENT:field}"
+    output: "{{ .grok.field }}"

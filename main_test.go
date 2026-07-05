@@ -107,3 +107,47 @@ func TestFileFrenchMonths(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Contains(t, output, "08-27-2014")
 }
+
+func TestRunMissingConfigFile(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+
+	os.Args = []string{"./fileganizer", "-c", "testdata/nonexistent.yaml", "-f", "testdata/ykjwmwqqjhgh.txt"}
+
+	err := run()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "nonexistent.yaml")
+}
+
+func TestRunMissingInputFile(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+
+	os.Args = []string{"./fileganizer", "-c", "testdata/config.ykjwmwqqjhgh.yaml", "-f", "testdata/nonexistent.txt"}
+
+	err := run()
+	assert.Error(t, err)
+}
+
+func TestRunTextOutputFlag(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+
+	os.Args = []string{"./fileganizer", "-c", "testdata/config.ykjwmwqqjhgh.yaml", "-f", "testdata/ykjwmwqqjhgh.txt", "-t"}
+
+	output, err := captureOutput(func() error {
+		return run()
+	})
+	assert.NoError(t, err)
+	assert.Contains(t, output, "Invoice")
+}
+
+func TestRunBrokenGrokPattern(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+
+	os.Args = []string{"./fileganizer", "-c", "testdata/config.ykjwmwqqjhghBrokenGrok.yaml", "-f", "testdata/ykjwmwqqjhgh.txt"}
+
+	err := run()
+	assert.Error(t, err)
+}

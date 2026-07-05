@@ -25,28 +25,28 @@ var (
 	version string
 )
 
-func main() {
+func run() error {
 	l := logger.Get()
 
 	cfg, err := config.New(Version)
 	if err != nil {
-		os.Exit(1)
+		return err
 	}
 
 	txt, err := textextract.TextExtract(context.Background(), cfg.InputFile, cfg.ExtractTextCommand)
 	if err != nil {
-		os.Exit(1)
+		return err
 	}
 	if cfg.TextOutput {
 		fmt.Printf("%v\n", txt)
-		os.Exit(0)
+		return nil
 	}
 	g := grok.New(cfg.GrokPatterns)
 	o := output.New(cfg.CommonTemplate, cfg.Months)
 	for _, fd := range cfg.FileDescriptions {
 		r, err := g.ParseAll(fd.Patterns, txt)
 		if err != nil {
-			os.Exit(1)
+			return err
 		}
 		if r == nil {
 			continue
@@ -61,14 +61,21 @@ func main() {
 			continue
 		}
 		if cfg.NoDryRun {
-			run, err := exec.CommandContext(context.Background(), "bash", "-c", outputResult).Output()
-			fmt.Printf("%s", string(run))
+			out, err := exec.CommandContext(context.Background(), "bash", "-c", outputResult).Output()
+			fmt.Printf("%s", string(out))
 			if err != nil {
-				l.Error("Run output command", "command output", string(run), "error", err)
-				os.Exit(1)
+				l.Error("Run output command", "command output", string(out), "error", err)
+				return err
 			}
 		} else {
 			fmt.Printf("%s", outputResult)
 		}
+	}
+	return nil
+}
+
+func main() {
+	if err := run(); err != nil {
+		os.Exit(1)
 	}
 }
