@@ -51,7 +51,6 @@ func (g *Grok) Parse(grokPattern, text string) (map[string]string, error) {
 	l.Debug("Testing pattern", "pattern", grokPattern, "text", text)
 	p, err := g.host.Compile(grokPattern)
 	if err != nil {
-		l.Error("grok compile failed", "error", err)
 		return nil, err
 	}
 	result := p.Parse(text)

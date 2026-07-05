@@ -31,7 +31,6 @@ func TextExtract(ctx context.Context, filename string, command []string) (string
 	l.Debug("ExtractTextCommand", "command", command[0])
 	source, err := exec.CommandContext(ctx, command[0], args...).Output() //nolint:gosec
 	if err != nil {
-		l.Error("ExtractTextCommand failed", "error", err)
 		return "", err
 	}
 	return string(source), nil

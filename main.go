@@ -14,7 +14,6 @@ import (
 
 	"fileganizer/config"
 	"fileganizer/grok"
-	"fileganizer/logger"
 	"fileganizer/output"
 	"fileganizer/textextract"
 )
@@ -34,8 +33,6 @@ func run() error {
 		}
 		return err
 	}
-
-	l := logger.Get()
 
 	txt, err := textextract.TextExtract(context.Background(), cfg.InputFile, cfg.ExtractTextCommand)
 	if err != nil {
@@ -68,7 +65,6 @@ func run() error {
 			out, err := exec.CommandContext(context.Background(), "bash", "-c", outputResult).Output()
 			fmt.Printf("%s", string(out))
 			if err != nil {
-				l.Error("Run output command", "command output", string(out), "error", err)
 				return err
 			}
 		} else {
@@ -80,6 +76,7 @@ func run() error {
 
 func main() {
 	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
 }
