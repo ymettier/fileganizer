@@ -39,10 +39,9 @@ func (g *Grok) ParseAll(grokPatterns []string, text string) (map[string]string, 
 		if len(r) == 0 {
 			logger.Get().Debug("No pattern matched", "pattern", p)
 			return nil, nil
-		} else {
-			for k, v := range r {
-				result[k] = v
-			}
+		}
+		for k, v := range r {
+			result[k] = v
 		}
 	}
 	return result, nil
