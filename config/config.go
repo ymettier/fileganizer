@@ -150,7 +150,7 @@ func New(version string) (Config, error) {
 func loggerConfig(k *koanf.Koanf) logger.LogOptions {
 	logOpts := logger.LogOptions{
 		Level:      "INFO",
-		Filename:   "stdout",
+		Filename:   "stderr",
 		MaxSize:    5,
 		MaxBackups: 10,
 		MaxAge:     14,

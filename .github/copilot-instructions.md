@@ -7,7 +7,7 @@ Fileganizer is a Go CLI tool that processes documents through a pipeline: text e
 - **Language**: Go 1.26
 - **CLI parsing**: `github.com/spf13/pflag`
 - **Grok patterns**: `github.com/logrusorgru/grokky`
-- **Logging**: `log/slog` (stdlib, text handler, defaults to stdout)
+- **Logging**: `log/slog` (stdlib, text handler, defaults to stderr)
 - **Templates**: `text/template` (stdlib)
 - **Testing**: `testing` + `github.com/stretchr/testify/assert`
 - **Build**: GoReleaser, CGO_ENABLED=0, Linux only (amd64/arm64)
