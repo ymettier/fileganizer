@@ -38,7 +38,7 @@ var patternsNotMatching = []string{
 
 func TestNew(t *testing.T) {
 	g := New(grokPatterns)
-	assert.Equal(t, len(grokPatterns), len(g.Host))
+	assert.Equal(t, len(grokPatterns), len(g.host))
 }
 
 func TestParseOK(t *testing.T) {

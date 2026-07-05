@@ -5,7 +5,6 @@ package config
 
 import (
 	"errors"
-	"fileganizer/logger"
 	"fmt"
 	"os"
 	"runtime/debug"
@@ -17,6 +16,8 @@ import (
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
 	"github.com/spf13/pflag"
+
+	"fileganizer/logger"
 )
 
 func printVersion(version string) string {
@@ -55,8 +56,8 @@ func printVersion(version string) string {
 // ErrVersionRequested is returned by New when the user passes --version.
 var ErrVersionRequested = errors.New("version requested")
 
-// CLIFlags holds the parsed command-line flag values.
-type CLIFlags struct {
+// cliFlags holds the parsed command-line flag values.
+type cliFlags struct {
 	ConfigFile   string
 	InputFile    string
 	TextOutput   bool
@@ -64,7 +65,7 @@ type CLIFlags struct {
 	ShowVersion  bool
 }
 
-func parseFlags(version string, args []string) (CLIFlags, error) {
+func parseFlags(version string, args []string) (cliFlags, error) {
 	fs := pflag.NewFlagSet("fileganizer", pflag.ContinueOnError)
 
 	configFile := fs.StringP("config", "c", "", "Configuration file")
@@ -74,21 +75,21 @@ func parseFlags(version string, args []string) (CLIFlags, error) {
 	showVersion := fs.BoolP("version", "V", false, "Show version info")
 
 	if err := fs.Parse(args); err != nil {
-		return CLIFlags{}, fmt.Errorf("error parsing flags: %w", err)
+		return cliFlags{}, fmt.Errorf("error parsing flags: %w", err)
 	}
 
 	if *showVersion {
-		return CLIFlags{ShowVersion: true}, nil
+		return cliFlags{ShowVersion: true}, nil
 	}
 
 	if *configFile == "" {
-		return CLIFlags{}, fmt.Errorf("--config/-c is required")
+		return cliFlags{}, fmt.Errorf("--config/-c is required")
 	}
 	if *inputFile == "" {
-		return CLIFlags{}, fmt.Errorf("--file/-f is required")
+		return cliFlags{}, fmt.Errorf("--file/-f is required")
 	}
 
-	return CLIFlags{
+	return cliFlags{
 		ConfigFile: *configFile,
 		InputFile:  *inputFile,
 		TextOutput: *textOutput,
@@ -221,6 +222,7 @@ func (c *Config) loadYAML(filename string) (*koanf.Koanf, error) {
 		return nil, fmt.Errorf("failed to read configuration file %s: %w", filename, err)
 	}
 
+	// env.Provider produces flat key=value pairs, so no parser is needed (nil is fine).
 	if err := k.Load(env.Provider("FILEGANIZER_", ".", func(s string) string {
 		s = strings.TrimPrefix(s, "FILEGANIZER_")
 		s = strings.ToLower(s)

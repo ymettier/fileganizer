@@ -5,18 +5,18 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"errors"
-	"fileganizer/config"
-	"fileganizer/grok"
-	"fileganizer/logger"
-	"fileganizer/output"
-	"fileganizer/textextract"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
 
-	_ "embed"
+	"fileganizer/config"
+	"fileganizer/grok"
+	"fileganizer/logger"
+	"fileganizer/output"
+	"fileganizer/textextract"
 )
 
 // Version contains the build version string, set at compile time via version.txt.

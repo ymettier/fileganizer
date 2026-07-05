@@ -4,7 +4,6 @@
 package config
 
 import (
-	"fileganizer/testutil"
 	"os"
 	"strings"
 	"testing"
@@ -12,6 +11,8 @@ import (
 	"github.com/knadh/koanf/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"fileganizer/testutil"
 )
 
 func TestVersion(t *testing.T) {

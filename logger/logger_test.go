@@ -6,7 +6,6 @@ package logger
 import (
 	"context"
 	"encoding/json"
-	"fileganizer/testutil"
 	"io"
 	"os"
 	"strings"
@@ -15,6 +14,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"fileganizer/testutil"
 )
 
 func resetGlobal() {

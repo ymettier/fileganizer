@@ -4,22 +4,22 @@
 package grok
 
 import (
-	"fileganizer/logger"
-
 	"github.com/logrusorgru/grokky"
+
+	"fileganizer/logger"
 )
 
 // Grok wraps a grokky host to compile and match grok patterns against text.
 type Grok struct {
-	Host grokky.Host
+	host grokky.Host
 }
 
 // New creates a Grok instance and registers the given named patterns.
 func New(patterns map[string]string) Grok {
 	var g Grok
-	g.Host = grokky.New()
+	g.host = grokky.New()
 	for k, p := range patterns {
-		g.Host.Must(k, p)
+		g.host.Must(k, p)
 	}
 	return g
 }
@@ -49,7 +49,7 @@ func (g *Grok) ParseAll(grokPatterns []string, text string) (map[string]string, 
 func (g *Grok) Parse(grokPattern, text string) (map[string]string, error) {
 	l := logger.Get()
 	l.Debug("Testing pattern", "pattern", grokPattern, "text", text)
-	p, err := g.Host.Compile(grokPattern)
+	p, err := g.host.Compile(grokPattern)
 	if err != nil {
 		l.Error("grok compile failed", "error", err)
 		return nil, err

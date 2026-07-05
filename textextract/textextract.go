@@ -5,9 +5,9 @@ package textextract
 
 import (
 	"context"
-	"fileganizer/logger"
-
 	"os/exec"
+
+	"fileganizer/logger"
 )
 
 const templateFileName = "FILENAME"
