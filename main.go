@@ -14,6 +14,7 @@ import (
 
 	"fileganizer/config"
 	"fileganizer/grok"
+	"fileganizer/logger"
 	"fileganizer/output"
 	"fileganizer/textextract"
 )
@@ -64,6 +65,7 @@ func run() error {
 		}
 		outputResult, err := o.FromTemplate(fd.Output, values)
 		if err != nil {
+			logger.Get().Debug("Silently skipping template", "output", fd.Output, "error", err)
 			continue
 		}
 		if cfg.NoDryRun {
