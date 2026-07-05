@@ -5,6 +5,7 @@ package textextract
 
 import (
 	"context"
+	"errors"
 	"os/exec"
 
 	"fileganizer/logger"
@@ -17,6 +18,9 @@ const templateFileName = "FILENAME"
 func TextExtract(ctx context.Context, filename string, command []string) (string, error) {
 	l := logger.Get()
 	l.Debug("ExtractTextCommand", "command", command)
+	if len(command) == 0 {
+		return "", errors.New("empty command")
+	}
 	args := make([]string, 0)
 	for i, v := range command {
 		if i == 0 {
