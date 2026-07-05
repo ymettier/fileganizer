@@ -106,12 +106,14 @@ func (c *Config) readConfig(filename string) error { //nolint:unparam // Functio
 	l := logger.Get()
 	yamlFile, err := os.ReadFile(filename)
 	if err != nil {
-		l.Fatal("Could not read configuration file", "file", filename, "error", err)
+		l.Error("Could not read configuration file", "file", filename, "error", err)
+		return err
 	}
 
 	err = yaml.Unmarshal(yamlFile, &data)
 	if err != nil {
-		l.Fatal("Could not parse configuration file", "file", filename, "error", err)
+		l.Error("Could not parse configuration file", "file", filename, "error", err)
+		return err
 	}
 
 	// Configuration file format
@@ -161,7 +163,8 @@ func (c *Config) readConfig(filename string) error { //nolint:unparam // Functio
 			for _, e := range data["env"].([]any) {
 				val, ok := os.LookupEnv(e.(string))
 				if !ok {
-					l.Fatal("Environment variable (from configuration file) is not set", "name", e.(string))
+					l.Error("Environment variable (from configuration file) is not set", "name", e.(string))
+					return fmt.Errorf("environment variable (from configuration file) is not set: %s", e.(string))
 				}
 				c.EnvVars[e.(string)] = val
 			}
