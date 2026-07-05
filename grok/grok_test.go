@@ -84,3 +84,32 @@ func TestParseAllNothing(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, r, 0)
 }
+
+func TestNew_InvalidPatternRegistration(t *testing.T) {
+	badPatterns := map[string]string{"": ""}
+	_, err := New(badPatterns)
+	assert.Error(t, err)
+}
+
+func TestParse_InvalidCompile(t *testing.T) {
+	g, err := New(grokPatterns)
+	require.NoError(t, err)
+
+	_, err = g.Parse("%{NONEXISTENT:bad}", contents)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "NONEXISTENT")
+}
+
+func TestParseAll_ErrorMidChain(t *testing.T) {
+	g, err := New(grokPatterns)
+	require.NoError(t, err)
+
+	// First pattern matches, second fails
+	patterns := []string{
+		"Identifier : %{NUMBER:identifier}",
+		"%{NONEXISTENT:bad}",
+	}
+	_, err = g.ParseAll(patterns, contents)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "NONEXISTENT")
+}

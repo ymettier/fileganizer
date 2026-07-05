@@ -86,3 +86,13 @@ func TestTextExtractFilenameDoesNotExist(t *testing.T) {
 		}
 	}
 }
+
+func TestTextExtractEmptyCommand(t *testing.T) {
+	_, err := TextExtract(context.Background(), "file.txt", nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "empty command")
+
+	_, err = TextExtract(context.Background(), "file.txt", []string{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "empty command")
+}

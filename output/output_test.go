@@ -49,3 +49,25 @@ func TestFromTemplateWithBrokenTemplate(t *testing.T) {
 	_, err := o.FromTemplate("{{", vars)
 	assert.Error(t, err)
 }
+
+func TestFromTemplate_ExecuteError(t *testing.T) {
+	o := New("", nil)
+
+	// ToUpper expects a string; passing an int causes a type error at execution
+	_, err := o.FromTemplate("{{ ToUpper 42 }}", nil)
+	assert.Error(t, err)
+}
+
+func TestMonthIndex_NoMatch(t *testing.T) {
+	o := New("", nil)
+
+	result := o.MonthIndex("NotAMonth")
+	assert.Equal(t, "NotAMonth", result)
+}
+
+func TestMonthIndex_EmptyMonths(t *testing.T) {
+	o := New("", map[string][]string{})
+
+	result := o.MonthIndex("January")
+	assert.Equal(t, "January", result)
+}

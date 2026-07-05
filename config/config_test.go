@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/knadh/koanf/v2"
+	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -258,6 +259,30 @@ func TestLookupConfigStrings(t *testing.T) {
 	assert.False(t, ok)
 }
 
+func TestLookupConfigMapKeys(t *testing.T) {
+	k := koanf.New(".")
+	require.NoError(t, k.Set("section.a", "1"))
+	require.NoError(t, k.Set("section.b", "2"))
+	require.NoError(t, k.Set("section.c", "3"))
+
+	keys := lookupConfigMapKeys(k, "section")
+	assert.ElementsMatch(t, []string{"a", "b", "c"}, keys)
+
+	empty := lookupConfigMapKeys(k, "nonexistent")
+	assert.Empty(t, empty)
+}
+
+func TestParseFlags_Help(t *testing.T) {
+	_, err := parseFlags([]string{"fileganizer", "--help"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, pflag.ErrHelp)
+}
+
+func TestParseFlags_InvalidFlag(t *testing.T) {
+	_, err := parseFlags([]string{"fileganizer", "--bogus"})
+	require.Error(t, err)
+}
+
 func TestLoggerConfigDefaults(t *testing.T) {
 	k := koanf.New(".")
 	opts := loggerConfig(k)
@@ -306,4 +331,30 @@ func TestLoggerConfigPartialOverrides(t *testing.T) {
 	assert.Equal(t, 14, opts.MaxAge)
 	assert.True(t, opts.Compress)
 	assert.False(t, opts.JSON)
+}
+
+func TestParseGrokPatterns_MonthKeyCollision(t *testing.T) {
+	k := koanf.New(".")
+	require.NoError(t, k.Set("grokPatterns.COLLIDE", "[0-9]+"))
+	require.NoError(t, k.Set("months.COLLIDE", []string{"jan", "feb"}))
+
+	c := &Config{}
+	c.parseMonths(k)
+
+	err := c.parseGrokPatterns(k)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "conflicts with existing grok pattern")
+}
+
+func TestParseGrokPatterns_MonthKeyCollisionReversed(t *testing.T) {
+	k := koanf.New(".")
+	require.NoError(t, k.Set("months.COLLIDE", []string{"jan", "feb"}))
+	require.NoError(t, k.Set("grokPatterns.COLLIDE", ".*"))
+
+	c := &Config{}
+	c.parseMonths(k)
+
+	err := c.parseGrokPatterns(k)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "conflicts with existing grok pattern")
 }
