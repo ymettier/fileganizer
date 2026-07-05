@@ -11,10 +11,13 @@ import (
 	"strings"
 	"time"
 
+	"log/slog"
+
 	"github.com/knadh/koanf/parsers/yaml"
+	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
-	flag "github.com/spf13/pflag"
+	"github.com/spf13/pflag"
 )
 
 func printVersion(version string) string {
@@ -50,6 +53,49 @@ func printVersion(version string) string {
 	return output
 }
 
+type CLIFlags struct {
+	ConfigFile string
+	InputFile  string
+	TextOutput bool
+	NoDryRun   bool
+}
+
+func parseFlags(version string) CLIFlags {
+	fs := pflag.NewFlagSet("fileganizer", pflag.ContinueOnError)
+
+	configFile := fs.StringP("config", "c", "", "Configuration file")
+	inputFile := fs.StringP("file", "f", "", "File to scan")
+	textOutput := fs.BoolP("text-output", "t", false, "Show extracted text")
+	noDryRun := fs.BoolP("run", "r", false, "No Dry run with output of the command. Really run it !")
+	showVersion := fs.BoolP("version", "V", false, "Show version info")
+
+	if err := fs.Parse(os.Args[1:]); err != nil {
+		fmt.Fprintf(os.Stderr, "Error parsing flags: %v\n", err)
+		os.Exit(1)
+	}
+
+	if *showVersion {
+		fmt.Print(printVersion(version))
+		os.Exit(0)
+	}
+
+	if *configFile == "" {
+		fmt.Fprintf(os.Stderr, "Error: --config/-c is required\n")
+		os.Exit(1)
+	}
+	if *inputFile == "" {
+		fmt.Fprintf(os.Stderr, "Error: --file/-f is required\n")
+		os.Exit(1)
+	}
+
+	return CLIFlags{
+		ConfigFile: *configFile,
+		InputFile:  *inputFile,
+		TextOutput: *textOutput,
+		NoDryRun:   *noDryRun,
+	}
+}
+
 type FileDescription struct {
 	Name     string
 	Patterns []string
@@ -69,43 +115,86 @@ type Config struct {
 }
 
 func New(version string) (Config, error) {
+	flags := parseFlags(version)
 	var cfg Config
+	cfg.InputFile = flags.InputFile
+	cfg.TextOutput = flags.TextOutput
+	cfg.NoDryRun = flags.NoDryRun
 
-	f := flag.NewFlagSet("fileganizer", flag.ContinueOnError)
-	configFile := f.StringP("config", "c", "", "Configuration file")
-	inputFile := f.StringP("file", "f", "", "File to scan")
-	textOutput := f.BoolP("text-output", "t", false, "Show extracted text")
-	noDryRun := f.BoolP("run", "r", false, "No Dry run with output of the command. Really run it !")
-	showVersion := f.BoolP("version", "V", false, "Show version info")
-
-	f.Parse(os.Args[1:])
-
-	if *showVersion {
-		fmt.Print(printVersion(version))
-		os.Exit(0)
-	}
-
-	if *configFile == "" {
-		return cfg, fmt.Errorf("--config/-c is required")
-	}
-	if *inputFile == "" {
-		return cfg, fmt.Errorf("--file/-f is required")
-	}
-
-	cfg.InputFile = *inputFile
-	cfg.TextOutput = *textOutput
-	cfg.NoDryRun = *noDryRun
-
-	err := cfg.readConfig(*configFile)
+	err := cfg.readConfig(flags.ConfigFile)
 	if err != nil {
 		return cfg, err
 	}
 
-	if len(cfg.ExtractTextCommand) == 0 {
-		return cfg, fmt.Errorf("ExtractTextCommand is required in configuration file")
+	return cfg, nil
+}
+
+func loggerConfig(k *koanf.Koanf) logger.LogOptions {
+	logOpts := logger.LogOptions{
+		Level:      "INFO",
+		Filename:   "",
+		MaxSize:    5,
+		MaxBackups: 10,
+		MaxAge:     14,
+		Compress:   true,
+		JSON:       false,
 	}
 
-	return cfg, nil
+	if v := k.String("logging.level"); v != "" {
+		logOpts.Level = v
+	}
+	if v := k.String("logging.filename"); v != "" {
+		logOpts.Filename = v
+	}
+	if k.Exists("logging.maxSize") {
+		logOpts.MaxSize = k.Int("logging.maxSize")
+	}
+	if k.Exists("logging.maxBackups") {
+		logOpts.MaxBackups = k.Int("logging.maxBackups")
+	}
+	if k.Exists("logging.maxAge") {
+		logOpts.MaxAge = k.Int("logging.maxAge")
+	}
+	if k.Exists("logging.compress") {
+		logOpts.Compress = k.Bool("logging.compress")
+	}
+	if k.Exists("logging.json") {
+		logOpts.JSON = k.Bool("logging.json")
+	}
+	return logOpts
+}
+
+func lookupConfigString(k *koanf.Koanf, camelKey string) (string, bool) {
+	envKey := strings.ToLower(camelKey)
+	if k.Exists(envKey) {
+		return k.String(envKey), true
+	}
+	if k.Exists(camelKey) {
+		return k.String(camelKey), true
+	}
+	return "", false
+}
+
+func lookupConfigStrings(k *koanf.Koanf, camelKey string) ([]string, bool) {
+	envKey := strings.ToLower(camelKey)
+	if k.Exists(envKey) {
+		return k.Strings(envKey), true
+	}
+	if k.Exists(camelKey) {
+		return k.Strings(camelKey), true
+	}
+	return nil, false
+}
+
+func lookupConfigMapKeys(k *koanf.Koanf, camelKey string) []string {
+	envKey := strings.ToLower(camelKey)
+	if k.Exists(envKey) {
+		return k.MapKeys(envKey)
+	}
+	if k.Exists(camelKey) {
+		return k.MapKeys(camelKey)
+	}
+	return nil
 }
 
 func (c *Config) readConfig(filename string) error {
@@ -113,76 +202,83 @@ func (c *Config) readConfig(filename string) error {
 
 	k := koanf.New(".")
 
-	err := k.Load(file.Provider(filename), yaml.Parser())
-	if err != nil {
-		l.Error("Could not read or parse configuration file", "file", filename, "error", err)
-		return err
+	if err := k.Load(file.Provider(filename), yaml.Parser()); err != nil {
+		return fmt.Errorf("failed to read configuration file %s: %w", filename, err)
 	}
 
-	// parse ExtractTextCommand
-	c.ExtractTextCommand = k.Strings("ExtractTextCommand")
+	if err := k.Load(env.Provider("FILEGANIZER_", ".", func(s string) string {
+		s = strings.TrimPrefix(s, "FILEGANIZER_")
+		s = strings.ToLower(s)
+		s = strings.ReplaceAll(s, "_", ".")
+		return s
+	}), nil); err != nil {
+		return fmt.Errorf("failed to load environment variables: %w", err)
+	}
 
-	// parse env
+	if k.Exists("logging") {
+		logOpts := loggerConfig(k)
+		logger.Reset(&logOpts)
+		l = logger.Get()
+	}
+
+	c.ExtractTextCommand, _ = lookupConfigStrings(k, "ExtractTextCommand")
+	if len(c.ExtractTextCommand) == 0 {
+		return fmt.Errorf("ExtractTextCommand is required in configuration file")
+	}
+
 	c.EnvVars = make(map[string]string)
-	if envList := k.Strings("env"); len(envList) > 0 {
-		for _, e := range envList {
-			val, ok := os.LookupEnv(e)
-			if !ok {
-				l.Error("Environment variable (from configuration file) is not set", "name", e)
-				return fmt.Errorf("environment variable (from configuration file) is not set: %s", e)
-			}
-			c.EnvVars[e] = val
+	envList, _ := lookupConfigStrings(k, "env")
+	for _, name := range envList {
+		val, ok := os.LookupEnv(name)
+		if !ok {
+			l.Error("Environment variable (from configuration file) is not set", slog.String("name", name))
+			return fmt.Errorf("environment variable (from configuration file) is not set: %s", name)
+		}
+		c.EnvVars[name] = val
+	}
+
+	if val, ok := lookupConfigString(k, "commonTemplate"); ok {
+		c.CommonTemplate = val
+	}
+
+	c.Months = make(map[string][]string)
+	for _, key := range lookupConfigMapKeys(k, "months") {
+		prefix := "months." + key
+		if vals, ok := lookupConfigStrings(k, prefix); ok {
+			c.Months[key] = vals
 		}
 	}
 
-	// parse commonTemplate
-	c.CommonTemplate = k.String("commonTemplate")
-
-	// parse months
-	if k.Exists("months") {
-		var months map[string][]string
-		if err := k.Unmarshal("months", &months); err != nil {
-			l.Error("Could not parse months configuration", "error", err)
-			return err
-		}
-		c.Months = months
-	}
-	if c.Months == nil {
-		c.Months = make(map[string][]string)
-	}
-
-	// parse grokPatterns
 	c.GrokPatterns = make(map[string]string)
-	for key, val := range k.StringMap("grokPatterns") {
-		c.GrokPatterns[key] = val
+	for _, key := range lookupConfigMapKeys(k, "grokPatterns") {
+		prefix := "grokPatterns." + key
+		if val, ok := lookupConfigString(k, prefix); ok {
+			c.GrokPatterns[key] = val
+		}
 	}
-	// append months patterns to GrokPatterns
 	for key, months := range c.Months {
 		c.GrokPatterns[key] = "(" + strings.Join(months, "|") + ")"
 	}
 
-	// parse fileDescriptions
 	c.FileDescriptions = make([]FileDescription, 0)
-	if fdRaw := k.Get("fileDescriptions"); fdRaw != nil {
-		if fdMap, ok := fdRaw.(map[string]any); ok {
-			for name, v := range fdMap {
-				var d FileDescription
-				d.Name = name
-				if entry, ok := v.(map[string]any); ok {
-					if patterns, ok := entry["patterns"].([]any); ok {
-						d.Patterns = make([]string, 0, len(patterns))
-						for _, p := range patterns {
-							d.Patterns = append(d.Patterns, fmt.Sprintf("%v", p))
-						}
-					}
-					if output, ok := entry["output"].(string); ok {
-						d.Output = output
-					}
-				}
-				c.FileDescriptions = append(c.FileDescriptions, d)
-			}
+	for _, id := range lookupConfigMapKeys(k, "fileDescriptions") {
+		prefix := "fileDescriptions." + id + "."
+		d := FileDescription{
+			Name: id,
 		}
+		if patterns, ok := lookupConfigStrings(k, prefix+"patterns"); ok {
+			d.Patterns = patterns
+		}
+		if output, ok := lookupConfigString(k, prefix+"output"); ok {
+			d.Output = output
+		}
+		c.FileDescriptions = append(c.FileDescriptions, d)
 	}
+
+	l.Info("Configuration loaded",
+		slog.String("file", filename),
+		slog.Int("fileDescriptions", len(c.FileDescriptions)),
+	)
 
 	return nil
 }
