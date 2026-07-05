@@ -6,6 +6,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"runtime/debug"
 	"strings"
@@ -24,6 +25,8 @@ func formatVersion(version string) string {
 	output := fmt.Sprintf("%-15s: %s\n", "Version", version)
 
 	var lastCommit time.Time
+	var rawLastCommit string
+	var parseVCSTimeErr error
 	revision := "unknown"
 	dirtyBuild := true
 
@@ -40,7 +43,11 @@ func formatVersion(version string) string {
 		case "vcs.revision":
 			revision = kv.Value
 		case "vcs.time":
-			lastCommit, _ = time.Parse(time.RFC3339, kv.Value)
+			rawLastCommit = kv.Value
+			lastCommit, parseVCSTimeErr = time.Parse(time.RFC3339, kv.Value)
+			if parseVCSTimeErr != nil {
+				slog.Default().Warn("Failed to parse vcs.time", "value", rawLastCommit, "error", parseVCSTimeErr)
+			}
 		case "vcs.modified":
 			dirtyBuild = kv.Value == "true"
 		}
@@ -48,7 +55,11 @@ func formatVersion(version string) string {
 
 	output += fmt.Sprintf("%-15s: %s\n", "Revision", revision)
 	output += fmt.Sprintf("%-15s: %v\n", "Dirty Build", dirtyBuild)
-	output += fmt.Sprintf("%-15s: %s\n", "Last Commit", lastCommit)
+	if parseVCSTimeErr != nil {
+		output += fmt.Sprintf("%-15s: %s (raw)\n", "Last Commit", rawLastCommit)
+	} else {
+		output += fmt.Sprintf("%-15s: %s\n", "Last Commit", lastCommit)
+	}
 	output += fmt.Sprintf("%-15s: %s\n", "Go Version", info.GoVersion)
 	return output
 }
