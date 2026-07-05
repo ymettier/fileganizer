@@ -23,6 +23,7 @@ Fileganizer is a Go CLI tool that processes documents through a pipeline: text e
   // SPDX-License-Identifier: MIT
   ```
 - Copyright year is always 2023-XXXX (project founding year to the present)
+- All source file should have a copyright header (the syntax depends on the file type). For non-go files, use the appropriate comment syntax (e.g., `//` for `.txt`, `/*` for `.md`) and set a header similar to the `.go` files.
 - All public functions should have documentation comments
 - Keep functions focused and under 50 lines when possible
 - Use meaningful variable names
@@ -88,6 +89,9 @@ Fileganizer is a Go CLI tool that processes documents through a pipeline: text e
 ├── textextract/
 │   ├── textextract.go     # External command text extraction
 │   └── textextract_test.go
+├── testutil/
+│   ├── testutil.go        # Test helpers (temp dir, etc.)
+│   └── testutil_test.go
 ├── testdata/              # Test fixtures (PDF, text, config YAMLs)
 ├── config.yaml.sample     # Example configuration
 └── version.txt            # Embedded at build time (//go:embed)

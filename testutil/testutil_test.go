@@ -1,3 +1,6 @@
+// Copyright 2023-2026 The Fileganizer Authors. All rights reserved.
+// SPDX-License-Identifier: MIT
+
 package testutil
 
 import (
