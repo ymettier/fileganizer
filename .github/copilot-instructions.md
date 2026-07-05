@@ -28,6 +28,9 @@ Fileganizer is a Go CLI tool that processes documents through a pipeline: text e
 - Keep functions focused and under 50 lines when possible
 - Use meaningful variable names
 
+### Linting
+- flags (like `-c` or `-f`) are never constants. When the linter complain, add a `//nolint` directive to the line.
+
 ### Naming
 - Package names: single word, lowercase, matching directory name.
 - Files: `package.go` and `package_test.go` (same package, not `_test` external).
