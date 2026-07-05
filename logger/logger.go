@@ -5,9 +5,7 @@ package logger
 
 import (
 	"context"
-	"fmt"
 	"io"
-	"log"
 	"log/slog"
 	"os"
 	"strings"
@@ -83,13 +81,13 @@ func newLogger(opts *LogOptions) *Logger {
 	if opts != nil && opts.Level != "" {
 		levelStr = opts.Level
 	} else {
-		levelStr = os.Getenv("LOG_LEVEL")
+		levelStr = os.Getenv("FILEGANIZER_LOGGING_LEVEL")
 	}
 
 	if levelStr != "" {
 		var l slog.Level
 		if err := l.UnmarshalText([]byte(strings.ToUpper(levelStr))); err != nil {
-			log.Println(fmt.Errorf("invalid level, defaulting to INFO: %w", err))
+			slog.Default().Error("invalid level, defaulting to INFO", "error", err)
 		} else {
 			level = l
 		}

@@ -70,12 +70,15 @@ Show pdf text contents
 
 ## Environment variables
 
-| Name              | Value                                                                                     |
-|-------------------|-------------------------------------------------------------------------------------------|
-| LOG_TXT_FILENAME  | file to log in, in plain text. Possible values: `stdout`, `stderr`, any filename.         |
-| LOG_LEVEL         | one of `debug`, `info`, `warn`, `error`, `panic` or `fatal`. Default is `info`            |
+All YAML config keys can be overridden via `FILEGANIZER_*` environment variables.
+The key is lowercased and dots replaced with underscores. Examples:
 
-Note : if `LOG_TXT_FILENAME` is not set, logging will output to stderr in plain text format.
+| Variable                          | Overrides                     |
+|-----------------------------------|-------------------------------|
+| `FILEGANIZER_LOGGING_LEVEL`       | `logging.level`               |
+| `FILEGANIZER_LOGGING_FILENAME`    | `logging.filename`            |
+| `FILEGANIZER_LOGGING_JSON`        | `logging.json`                |
+| `FILEGANIZER_COMMONTEMPLATE`      | `commonTemplate`              |
 
 ## Licensing
 

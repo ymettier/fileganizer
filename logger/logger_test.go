@@ -89,8 +89,8 @@ func TestGetOtherJsonLogFile(t *testing.T) {
 }
 
 func TestLogLevel(t *testing.T) {
-	os.Setenv("LOG_LEVEL", "DEBUG")
-	defer os.Unsetenv("LOG_LEVEL")
+	os.Setenv("FILEGANIZER_LOGGING_LEVEL", "DEBUG")
+	defer os.Unsetenv("FILEGANIZER_LOGGING_LEVEL")
 
 	l := newLogger(nil)
 	assert.True(t, l.Enabled(context.Background(), -4)) // slog.LevelDebug is -4
@@ -153,8 +153,8 @@ func TestFromCtx_NoLogger(t *testing.T) {
 }
 
 func TestNewLogger_InvalidLevelEnv(t *testing.T) {
-	os.Setenv("LOG_LEVEL", "BOGUS")
-	defer os.Unsetenv("LOG_LEVEL")
+	os.Setenv("FILEGANIZER_LOGGING_LEVEL", "BOGUS")
+	defer os.Unsetenv("FILEGANIZER_LOGGING_LEVEL")
 
 	l := newLogger(nil)
 	assert.NotNil(t, l)
