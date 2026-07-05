@@ -120,6 +120,17 @@ Fileganizer is a Go CLI tool that processes documents through a pipeline: text e
 - `github.com/spf13/pflag` - CLI flag parsing
 - `github.com/stretchr/testify` - Testing utilities
 
+## Commits
+- Never commit, never stage (`git add`), never run any `git commit` command — even if the user explicitly asks you to commit.
+- Instead, always suggest a full `git commit` command for the user to run themselves.
+- Never work in the `main` branch.
+- Never commit to `main` branch.
+- Commit message should be clear and descriptive.
+- Commit message should follow the [Conventional Commits](https://www.conventionalcommits.org/) specification.
+- Commit message should be in the format: `<type>: <description>`.
+- Commit message should be lowercase and should not start with a capital letter.
+- Commit message should be descriptive and should not be too short.
+
 ## Build & Run
 - Build: `echo dev > version.txt && go build`
 - Test: `echo dev > version.txt && go test ./...`
@@ -128,7 +139,4 @@ Fileganizer is a Go CLI tool that processes documents through a pipeline: text e
 - Lint: `golangci-lint run ./...`. When it fails for versionning reasons, fallback to `docker run -t --rm -v $(pwd):/app:z -w /app golangci/golangci-lint:v2.12.2 golangci-lint run ./...`
 
 ## Important Notes
-- Never work in the `main` branch
-- Never commit to `main` branch
-- Never commit. Let the user commit their own changes. But suggest a commit message by showing the full `git commit` command.
 - Configuration errors cause immediate exit with os.Exit(1)
