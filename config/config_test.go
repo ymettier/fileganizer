@@ -21,6 +21,30 @@ func TestVersion(t *testing.T) {
 	assert.Equal(t, "Version        : "+wantedVersion, s[0], "Printing version")
 }
 
+func TestNewVersionFlag(t *testing.T) {
+	setArgs(t, "fileganizer", "-V")
+
+	cfg, err := New("1.2.3")
+	assert.ErrorIs(t, err, ErrVersionRequested)
+	assert.Empty(t, cfg.InputFile)
+}
+
+func TestNewMissingRequiredFlags(t *testing.T) {
+	t.Run("missing config flag", func(t *testing.T) {
+		setArgs(t, "fileganizer", "-f", "input.txt")
+		_, err := New("1.0")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "--config/-c")
+	})
+
+	t.Run("missing file flag", func(t *testing.T) {
+		setArgs(t, "fileganizer", "-c", "config.yaml")
+		_, err := New("1.0")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "--file/-f")
+	})
+}
+
 func writeConfig(t *testing.T, content string) string {
 	t.Helper()
 	filename := "test_config.yaml"

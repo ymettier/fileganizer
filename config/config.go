@@ -4,6 +4,7 @@
 package config
 
 import (
+	"errors"
 	"fileganizer/logger"
 	"fmt"
 	"os"
@@ -53,15 +54,19 @@ func printVersion(version string) string {
 	return output
 }
 
+// ErrVersionRequested is returned by New when the user passes --version.
+var ErrVersionRequested = errors.New("version requested")
+
 // CLIFlags holds the parsed command-line flag values.
 type CLIFlags struct {
-	ConfigFile string
-	InputFile  string
-	TextOutput bool
-	NoDryRun   bool
+	ConfigFile   string
+	InputFile    string
+	TextOutput   bool
+	NoDryRun     bool
+	ShowVersion  bool
 }
 
-func parseFlags(version string) CLIFlags {
+func parseFlags(version string) (CLIFlags, error) {
 	fs := pflag.NewFlagSet("fileganizer", pflag.ContinueOnError)
 
 	configFile := fs.StringP("config", "c", "", "Configuration file")
@@ -71,22 +76,18 @@ func parseFlags(version string) CLIFlags {
 	showVersion := fs.BoolP("version", "V", false, "Show version info")
 
 	if err := fs.Parse(os.Args[1:]); err != nil {
-		fmt.Fprintf(os.Stderr, "Error parsing flags: %v\n", err)
-		os.Exit(1)
+		return CLIFlags{}, fmt.Errorf("error parsing flags: %w", err)
 	}
 
 	if *showVersion {
-		fmt.Print(printVersion(version))
-		os.Exit(0)
+		return CLIFlags{ShowVersion: true}, nil
 	}
 
 	if *configFile == "" {
-		fmt.Fprintf(os.Stderr, "Error: --config/-c is required\n")
-		os.Exit(1)
+		return CLIFlags{}, fmt.Errorf("--config/-c is required")
 	}
 	if *inputFile == "" {
-		fmt.Fprintf(os.Stderr, "Error: --file/-f is required\n")
-		os.Exit(1)
+		return CLIFlags{}, fmt.Errorf("--file/-f is required")
 	}
 
 	return CLIFlags{
@@ -94,7 +95,7 @@ func parseFlags(version string) CLIFlags {
 		InputFile:  *inputFile,
 		TextOutput: *textOutput,
 		NoDryRun:   *noDryRun,
-	}
+	}, nil
 }
 
 // FileDescription describes a document type to match, including the grok patterns
@@ -120,15 +121,24 @@ type Config struct {
 }
 
 // New parses CLI flags and the YAML configuration file, returning a fully
-// populated Config. It exits on missing required flags or config errors.
+// populated Config. It returns ErrVersionRequested when --version is passed.
 func New(version string) (Config, error) {
-	flags := parseFlags(version)
+	flags, err := parseFlags(version)
+	if err != nil {
+		return Config{}, err
+	}
+
+	if flags.ShowVersion {
+		fmt.Print(printVersion(version))
+		return Config{}, ErrVersionRequested
+	}
+
 	var cfg Config
 	cfg.InputFile = flags.InputFile
 	cfg.TextOutput = flags.TextOutput
 	cfg.NoDryRun = flags.NoDryRun
 
-	err := cfg.readConfig(flags.ConfigFile)
+	err = cfg.readConfig(flags.ConfigFile)
 	if err != nil {
 		return cfg, err
 	}

@@ -151,3 +151,13 @@ func TestRunBrokenGrokPattern(t *testing.T) {
 	err := run()
 	assert.Error(t, err)
 }
+
+func TestRunVersionFlag(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+
+	os.Args = []string{"./fileganizer", "-V"}
+
+	err := run()
+	assert.NoError(t, err)
+}

@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fileganizer/config"
 	"fileganizer/grok"
 	"fileganizer/logger"
@@ -26,12 +27,15 @@ var (
 )
 
 func run() error {
-	l := logger.Get()
-
 	cfg, err := config.New(Version)
 	if err != nil {
+		if errors.Is(err, config.ErrVersionRequested) {
+			return nil
+		}
 		return err
 	}
+
+	l := logger.Get()
 
 	txt, err := textextract.TextExtract(context.Background(), cfg.InputFile, cfg.ExtractTextCommand)
 	if err != nil {
