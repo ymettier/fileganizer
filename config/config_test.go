@@ -46,12 +46,10 @@ func TestNewMissingRequiredFlags(t *testing.T) {
 	})
 }
 
-func writeConfig(t *testing.T, content string) string {
+func writeConfig(t *testing.T, content string) {
 	t.Helper()
-	filename := "test_config.yaml"
-	err := os.WriteFile(filename, []byte(content), 0600)
+	err := os.WriteFile("test_config.yaml", []byte(content), 0600)
 	require.NoError(t, err)
-	return filename
 }
 
 func setArgs(t *testing.T, args ...string) {
