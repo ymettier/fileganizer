@@ -73,6 +73,8 @@ Fileganizer is a Go CLI tool that processes documents through a pipeline: text e
 - Use testify assertions (`assert.Equal`, `assert.Nil`, `assert.FileExists`)
 - Tests should be isolated and use temporary files/directories
 - Always clean up test artifacts with defer
+- Test data files must be placed in the `testdata/` directory
+- Unused testdata files must be removed
 
 ## Project Structure
 ```
