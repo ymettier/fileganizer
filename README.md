@@ -4,8 +4,8 @@
 [![github](https://img.shields.io/badge/github-ymettier/fileganizer-181717?logo=github)](https://github.com/ymettier/fileganizer)
 [![version](https://img.shields.io/github/v/release/ymettier/fileganizer?color=blue)](https://github.com/ymettier/fileganizer/releases)
 [![license](https://img.shields.io/github/license/ymettier/fileganizer?color=blue)](https://github.com/ymettier/fileganizer/blob/main/LICENSE)
-[![go](https://github.com/ymettier/fileganizer/actions/workflows/go/badge.svg)](https://github.com/ymettier/fileganizer/actions/workflows/go.yml)
-[![golangci-lint](https://github.com/ymettier/fileganizer/actions/workflows/golangci-lint/badge.svg)](https://github.com/ymettier/fileganizer/actions/workflows/golangci-lint.yml)
+[![go-build](https://img.shields.io/github/actions/workflow/status/ymettier/fileganizer/go.yml?label=go-build)](https://github.com/ymettier/fileganizer/actions/workflows/go.yml)
+[![lint](https://img.shields.io/github/actions/workflow/status/ymettier/fileganizer/golangci-lint.yml?label=golangci-lint)](https://github.com/ymettier/fileganizer/actions/workflows/golangci-lint.yml)
 [![codecov](https://codecov.io/gh/ymettier/fileganizer/branch/main/graph/badge.svg)](https://codecov.io/gh/ymettier/fileganizer)
 
 # Fileganizer
