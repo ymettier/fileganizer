@@ -14,6 +14,8 @@ import (
 
 const filename = "testfile"
 
+const multiLineContent = "Some Contents\non more than\none line"
+
 func createFile(filename, contents string) error {
 	f, err := os.Create(filename)
 	if err != nil {
@@ -33,13 +35,11 @@ func createFile(filename, contents string) error {
 }
 
 func TestTextExtractCat(t *testing.T) {
-	fileContent := "Some Contents\non more than\none line"
-
 	command := []string{"cat", "FILENAME"} //nolint:goconst // In the test, it must be explicitly set to "FILENAME"
 
-	err := createFile(filename, fileContent)
+	err := createFile(filename, multiLineContent)
 	if err != nil {
-		t.Fatalf(`TestTextExtract : failed to create file '%s' with contents '%s'`, filename, fileContent)
+		t.Fatalf(`TestTextExtract : failed to create file '%s' with contents '%s'`, filename, multiLineContent)
 	}
 	defer os.Remove(filename)
 
@@ -48,17 +48,16 @@ func TestTextExtractCat(t *testing.T) {
 		t.Fatalf(`TestTextExtract : failed with error %v`, err)
 	}
 
-	assert.Equal(t, fileContent, output, `TestTextExtract : file contents '%v' differs from expected contents '%v'`, output, fileContent)
+	assert.Equal(t, multiLineContent, output,
+		`TestTextExtract : file contents '%v' differs from expected contents '%v'`, output, multiLineContent)
 }
 
 func TestTextExtractCatWithArgs(t *testing.T) {
-	fileContent := "Some Contents\non more than\none line"
-
 	command := []string{"cat", "-n", "FILENAME"}
 
-	err := createFile(filename, fileContent)
+	err := createFile(filename, multiLineContent)
 	if err != nil {
-		t.Fatalf(`TestTextExtract : failed to create file '%s' with contents '%s'`, filename, fileContent)
+		t.Fatalf(`TestTextExtract : failed to create file '%s' with contents '%s'`, filename, multiLineContent)
 	}
 	defer os.Remove(filename)
 
@@ -71,13 +70,11 @@ func TestTextExtractCatWithArgs(t *testing.T) {
 }
 
 func TestTextExtractCommandDoesNotExist(t *testing.T) {
-	fileContent := "Some Contents\non more than\none line"
-
 	command := []string{"thisCommandDoesNotExist", "FILENAME"}
 
-	err := createFile(filename, fileContent)
+	err := createFile(filename, multiLineContent)
 	if err != nil {
-		t.Fatalf(`TestTextExtract : failed to create file '%s' with contents '%s'`, filename, fileContent)
+		t.Fatalf(`TestTextExtract : failed to create file '%s' with contents '%s'`, filename, multiLineContent)
 	}
 	defer os.Remove(filename)
 
