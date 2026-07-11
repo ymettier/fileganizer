@@ -1,4 +1,12 @@
+# Copyright 2023-2026 The Fileganizer Authors. All rights reserved.
+# SPDX-License-Identifier: MIT
+
 ---
+# All YAML configuration keys can be overridden via FILEGANIZER_* environment
+# variables. The prefix FILEGANIZER_ is stripped, then the name is lowercased
+# and underscores are replaced with dots to match the YAML key path.
+# Examples: FILEGANIZER_LOGGING_LEVEL=debug, FILEGANIZER_EXTRACTTEXTCOMMAND_0=pdftotext
+
 # Logging configuration (optional). Defaults to INFO level on stdout.
 # Valid filename values: "stdout", "stderr", or a file path (enables rotation).
 # logging:

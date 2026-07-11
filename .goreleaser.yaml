@@ -1,3 +1,6 @@
+# Copyright 2023-2026 The Fileganizer Authors. All rights reserved.
+# SPDX-License-Identifier: MIT
+
 # yaml-language-server: $schema=https://goreleaser.com/static/schema.json
 # vim: set ts=2 sw=2 tw=0 fo=cnqoj
 

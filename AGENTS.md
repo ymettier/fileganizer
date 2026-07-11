@@ -47,9 +47,10 @@ Fileganizer is a Go CLI tool that processes documents through a pipeline: text e
 - Provide sensible defaults for all config options
 - Validate configuration values at startup
 - Support both short and long CLI flags
-- With Koand, prefer getting typed values than using the Get() method.
+- With Koanf, prefer getting typed values than using the Get() method.
 
 ### Environment Variables
+- Use optional environment variables for configuration (e.g., `FILEGANIZER_LOGGING_LEVEL`...)
 - Environment variables should override values from the config file
 - Environment variable names should be in uppercase with underscores (e.g., `FILEGANIZER_LOGGING_LEVEL`)
 - Environment variables should be documented in the `config.yaml.sample`
@@ -114,6 +115,13 @@ Fileganizer is a Go CLI tool that processes documents through a pipeline: text e
 3. Update help text
 4. Test with -h flag
 
+### Updating Go Version
+1. Update `go 1.xx.x` in `go.mod`
+2. Update Go version reference in AGENTS.md
+3. Update base image in Dockerfile (builder and runtime)
+4. Update `.golangci.yml` if it references a Go version
+5. Run `go mod tidy` after updating
+
 ## Dependencies
 - `github.com/knadh/koanf` - Configuration management
 - `gopkg.in/natefinch/lumberjack.v2` - Log rotation
@@ -137,6 +145,13 @@ Fileganizer is a Go CLI tool that processes documents through a pipeline: text e
 - Run: `./fileganizer -c <config.yaml> -f <file.pdf>` (dry-run) or `-r` (execute).
 - CLI flags: `-f` (file), `-c` (config), `-t` (show text only), `-r` (run command), `-V` (version).
 - Lint: `golangci-lint run ./...`. When it fails for versionning reasons, fallback to `docker run -t --rm -v $(pwd):/app:z -w /app golangci/golangci-lint:v2.12.2 golangci-lint run ./...`
+
+## Version Management
+- Keep Go version in `Dockerfile` and `.github/workflows/*.yml` in sync. Use the latest patch release (e.g., `1.26.5` not `1.26` or `stable`).
+- `go.mod` is the exception: its `go` directive sets the minimum Go version. Only bump when the code requires a newer toolchain feature.
+- Keep all tooling in `.github/workflows/` (goreleaser, golangci-lint, actions/\*) at their latest stable versions.
+- When updating a version, check all references across the project (go.mod, workflows, AGENTS.md).
+
 
 ## Important Notes
 - Configuration errors cause immediate exit with os.Exit(1)

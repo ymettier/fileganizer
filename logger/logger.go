@@ -57,44 +57,37 @@ func getWriter(opts *LogOptions) (io.Writer, bool) {
 	}
 
 	l := &lumberjack.Logger{
-		Filename: filename,
-	}
-	if opts != nil {
-		l.MaxSize = opts.MaxSize
-		l.MaxBackups = opts.MaxBackups
-		l.MaxAge = opts.MaxAge
-		l.Compress = opts.Compress
-	} else {
-		l.MaxSize = 5
-		l.MaxBackups = 10
-		l.MaxAge = 14
-		l.Compress = true
+		Filename:   filename,
+		MaxSize:    opts.MaxSize,
+		MaxBackups: opts.MaxBackups,
+		MaxAge:     opts.MaxAge,
+		Compress:   opts.Compress,
 	}
 	return l, true
 }
 
-// newLogger creates a new logger based on opts or environment variables if opts is nil.
-func newLogger(opts *LogOptions) *Logger {
-	// Define log level
-	level := slog.LevelInfo
-	var levelStr string
+func resolveLogLevel(opts *LogOptions) slog.Level {
+	levelStr := ""
 	if opts != nil && opts.Level != "" {
 		levelStr = opts.Level
 	} else {
 		levelStr = os.Getenv("FILEGANIZER_LOGGING_LEVEL")
 	}
-
-	if levelStr != "" {
-		var l slog.Level
-		if err := l.UnmarshalText([]byte(strings.ToUpper(levelStr))); err != nil {
-			slog.Default().Error("invalid level, defaulting to INFO", "error", err)
-		} else {
-			level = l
-		}
+	if levelStr == "" {
+		return slog.LevelInfo
 	}
+	var level slog.Level
+	if err := level.UnmarshalText([]byte(strings.ToUpper(levelStr))); err != nil {
+		slog.Default().Error("invalid level, defaulting to INFO", "error", err)
+		return slog.LevelInfo
+	}
+	return level
+}
 
+// newLogger creates a new logger based on opts or environment variables if opts is nil.
+func newLogger(opts *LogOptions) *Logger {
 	handlerOpts := &slog.HandlerOptions{
-		Level: level,
+		Level: resolveLogLevel(opts),
 	}
 
 	w, usingLumberjack := getWriter(opts)

@@ -230,6 +230,28 @@ fileDescriptions:
 	assert.Equal(t, "(Janvier|Février|Mars)", cfg.GrokPatterns["MONTHSFRENCH"])
 }
 
+func TestNewWithMonthGrokCollision(t *testing.T) {
+	testutil.UseTempDir(t)
+	configContent := `
+ExtractTextCommand: ["cat", "FILENAME"]
+months:
+  COLLIDE: ["jan"]
+grokPatterns:
+  COLLIDE: ".*"
+fileDescriptions:
+  test:
+    patterns:
+      - "%{COLLIDE:field}"
+    output: "anything"
+`
+	writeConfig(t, configContent)
+	setArgs(t, "fileganizer", "-c", "test_config.yaml", "-f", "input.txt")
+
+	_, err := New("1.0")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "conflicts with existing grok pattern")
+}
+
 func TestLookupConfigString(t *testing.T) {
 	k := koanf.New(".")
 	require.NoError(t, k.Set("camelKey", "camelValue"))
