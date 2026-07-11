@@ -1,8 +1,12 @@
 /* Copyright 2023-2026 The Fileganizer Authors. All rights reserved. */
 /* SPDX-License-Identifier: MIT */
 
-![Lint Status](https://github.com/ymettier/fileganizer/workflows/golangci-lint/badge.svg)
-![Build Status](https://github.com/ymettier/fileganizer/workflows/go-build/badge.svg)
+[![github](https://img.shields.io/badge/github-ymettier/fileganizer-181717?logo=github)](https://github.com/ymettier/fileganizer)
+[![version](https://img.shields.io/github/v/release/ymettier/fileganizer?color=blue)](https://github.com/ymettier/fileganizer/releases)
+[![license](https://img.shields.io/github/license/ymettier/fileganizer?color=blue)](https://github.com/ymettier/fileganizer/blob/main/LICENSE)
+[![go](https://github.com/ymettier/fileganizer/actions/workflows/go/badge.svg)](https://github.com/ymettier/fileganizer/actions/workflows/go.yml)
+[![golangci-lint](https://github.com/ymettier/fileganizer/actions/workflows/golangci-lint/badge.svg)](https://github.com/ymettier/fileganizer/actions/workflows/golangci-lint.yml)
+[![codecov](https://codecov.io/gh/ymettier/fileganizer/branch/main/graph/badge.svg)](https://codecov.io/gh/ymettier/fileganizer)
 
 # Fileganizer
 
