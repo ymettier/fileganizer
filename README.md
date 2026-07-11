@@ -1,3 +1,6 @@
+/* Copyright 2023-2026 The Fileganizer Authors. All rights reserved. */
+/* SPDX-License-Identifier: MIT */
+
 ![Lint Status](https://github.com/ymettier/fileganizer/workflows/golangci-lint/badge.svg)
 ![Build Status](https://github.com/ymettier/fileganizer/workflows/go-build/badge.svg)
 
