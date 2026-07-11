@@ -1,6 +1,3 @@
-/* Copyright 2023-2026 The Fileganizer Authors. All rights reserved. */
-/* SPDX-License-Identifier: MIT */
-
 [![github](https://img.shields.io/badge/github-ymettier/fileganizer-181717?logo=github)](https://github.com/ymettier/fileganizer)
 [![version](https://img.shields.io/github/v/release/ymettier/fileganizer?color=blue)](https://github.com/ymettier/fileganizer/releases)
 [![license](https://img.shields.io/github/license/ymettier/fileganizer?color=blue)](https://github.com/ymettier/fileganizer/blob/main/LICENSE)
@@ -90,3 +87,6 @@ The key is lowercased and dots replaced with underscores. Examples:
 ## Licensing
 
 This project is licensed under the MIT License. See the LICENSE file for the full license text.
+
+/* Copyright 2023-2026 The Fileganizer Authors. All rights reserved. */
+/* SPDX-License-Identifier: MIT */
