@@ -119,9 +119,8 @@ Fileganizer is a Go CLI tool that processes documents through a pipeline: text e
 ### Updating Go Version
 1. Update `go 1.xx.x` in `go.mod`
 2. Update Go version reference in AGENTS.md
-3. Update base image in Dockerfile (builder and runtime)
-4. Update `.golangci.yml` if it references a Go version
-5. Run `go mod tidy` after updating
+3. Update `.golangci.yml` if it references a Go version
+4. Run `go mod tidy` after updating
 
 ## Dependencies
 - `github.com/knadh/koanf` - Configuration management
@@ -148,7 +147,7 @@ Fileganizer is a Go CLI tool that processes documents through a pipeline: text e
 - Lint: `golangci-lint run ./...`. When it fails for versionning reasons, fallback to `docker run -t --rm -v $(pwd):/app:z -w /app golangci/golangci-lint:v2.12.2 golangci-lint run ./...`
 
 ## Version Management
-- Keep Go version in `Dockerfile` and `.github/workflows/*.yml` in sync. Use the latest patch release (e.g., `1.26.5` not `1.26` or `stable`).
+- Keep Go version consistent across `.github/workflows/*.yml`. Use `"1.26"` (resolves to latest patch) or `stable` for `actions/setup-go`.
 - `go.mod` is the exception: its `go` directive sets the minimum Go version. Only bump when the code requires a newer toolchain feature.
 - Keep all tooling in `.github/workflows/` (goreleaser, golangci-lint, actions/\*) at their latest stable versions.
 - When updating a version, check all references across the project (go.mod, workflows, AGENTS.md).
