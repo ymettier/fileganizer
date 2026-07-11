@@ -45,10 +45,10 @@ func run() error {
 		fmt.Printf("%v\n", txt)
 		return nil
 	}
-	return processFileDescriptions(ctx, cfg, txt)
+	return processFileDescriptions(ctx, &cfg, txt)
 }
 
-func processFileDescriptions(ctx context.Context, cfg config.Config, txt string) error {
+func processFileDescriptions(ctx context.Context, cfg *config.Config, txt string) error {
 	g, err := grok.New(cfg.GrokPatterns)
 	if err != nil {
 		return err
