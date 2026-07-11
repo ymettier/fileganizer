@@ -51,6 +51,25 @@ func TestTextExtractCat(t *testing.T) {
 	assert.Equal(t, fileContent, output, `TestTextExtract : file contents '%v' differs from expected contents '%v'`, output, fileContent)
 }
 
+func TestTextExtractCatWithArgs(t *testing.T) {
+	fileContent := "Some Contents\non more than\none line"
+
+	command := []string{"cat", "-n", "FILENAME"}
+
+	err := createFile(filename, fileContent)
+	if err != nil {
+		t.Fatalf(`TestTextExtract : failed to create file '%s' with contents '%s'`, filename, fileContent)
+	}
+	defer os.Remove(filename)
+
+	output, err := TextExtract(context.Background(), filename, command)
+	if err != nil {
+		t.Fatalf(`TestTextExtract : failed with error %v`, err)
+	}
+
+	assert.Contains(t, output, "Some Contents")
+}
+
 func TestTextExtractCommandDoesNotExist(t *testing.T) {
 	fileContent := "Some Contents\non more than\none line"
 

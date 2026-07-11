@@ -1,0 +1,16 @@
+---
+ExtractTextCommand: ["cat", "FILENAME"]
+
+months:
+  CLAASH: ["jan", "feb"]
+
+grokPatterns:
+  CLAASH: ".*"
+
+commonTemplate: ""
+
+fileDescriptions:
+  test:
+    patterns:
+      - "%{CLAASH:field}"
+    output: "anything"

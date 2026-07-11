@@ -150,6 +150,26 @@ func TestRunBrokenGrokPattern(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestFileRunModeFails(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+
+	os.Args = []string{"./fileganizer", "-c", "testdata/config.ykjwmwqqjhghRunFail.yaml", "-f", "testdata/ykjwmwqqjhgh.txt", "-r"}
+
+	err := run()
+	assert.Error(t, err)
+}
+
+func TestRunBrokenGrokPatternDefinition(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+
+	os.Args = []string{"./fileganizer", "-c", "testdata/config.brokenregex.yaml", "-f", "testdata/ykjwmwqqjhgh.txt"}
+
+	err := run()
+	assert.Error(t, err)
+}
+
 func TestRunVersionFlag(t *testing.T) {
 	oldArgs := os.Args
 	defer func() { os.Args = oldArgs }()

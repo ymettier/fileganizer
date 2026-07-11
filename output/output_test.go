@@ -59,11 +59,11 @@ func TestFromTemplate_ExecuteError(t *testing.T) {
 }
 
 func TestFromTemplate_NowFunctions(t *testing.T) {
-	o := New("{{ NowYYYY }}-{{ NowYYYYMMDD }}", nil)
+	o := New("{{ NowYYYY }}-{{ NowYYYYMMDD }}-{{ NowYYYYMMDD_HHMMSS }}", nil)
 
 	r, err := o.FromTemplate("", nil)
 	assert.NoError(t, err)
-	assert.Regexp(t, `^\d{4}-\d{8}\n$`, r)
+	assert.Regexp(t, `^\d{4}-\d{8}-\d{8}_\d{6}\n$`, r)
 }
 
 func TestMonthIndex_NoMatch(t *testing.T) {

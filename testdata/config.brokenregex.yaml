@@ -1,0 +1,13 @@
+---
+ExtractTextCommand: ["cat", "FILENAME"]
+
+grokPatterns:
+  BROKEN: "["
+
+commonTemplate: ""
+
+fileDescriptions:
+  test:
+    patterns:
+      - "%{BROKEN:field}"
+    output: "anything"
