@@ -41,6 +41,7 @@ func TestTextExtractCat(t *testing.T) {
 	if err != nil {
 		t.Fatalf(`TestTextExtract : failed to create file '%s' with contents '%s'`, filename, fileContent)
 	}
+	defer os.Remove(filename)
 
 	output, err := TextExtract(context.Background(), filename, command)
 	if err != nil {
@@ -48,11 +49,6 @@ func TestTextExtractCat(t *testing.T) {
 	}
 
 	assert.Equal(t, fileContent, output, `TestTextExtract : file contents '%v' differs from expected contents '%v'`, output, fileContent)
-
-	err = os.Remove(filename)
-	if err != nil {
-		t.Fatalf(`TestTextExtract : failed to remove file '%s'`, filename)
-	}
 }
 
 func TestTextExtractCommandDoesNotExist(t *testing.T) {
@@ -64,15 +60,11 @@ func TestTextExtractCommandDoesNotExist(t *testing.T) {
 	if err != nil {
 		t.Fatalf(`TestTextExtract : failed to create file '%s' with contents '%s'`, filename, fileContent)
 	}
+	defer os.Remove(filename)
 
 	_, err = TextExtract(context.Background(), filename, command)
 
 	assert.ErrorIsf(t, err, exec.ErrNotFound, `TestTextExtract : failed with error %v`, err)
-
-	err = os.Remove(filename)
-	if err != nil {
-		t.Fatalf(`TestTextExtract : failed to remove file '%s'`, filename)
-	}
 }
 
 func TestTextExtractFilenameDoesNotExist(t *testing.T) {
