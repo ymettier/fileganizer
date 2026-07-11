@@ -24,6 +24,7 @@ Fileganizer is a Go CLI tool that processes documents through a pipeline: text e
   ```
 - Copyright year is always 2023-XXXX (project founding year to the present)
 - All source file should have a copyright header (the syntax depends on the file type). For non-go files, use the appropriate comment syntax (e.g., `//` for `.txt`, `/*` for `.md`) and set a header similar to the `.go` files.
+- Copyright for README.md file must be set at the end of the file.
 - All public functions should have documentation comments
 - Keep functions focused and under 50 lines when possible
 - Use meaningful variable names
