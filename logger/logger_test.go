@@ -142,6 +142,22 @@ func TestReset(t *testing.T) {
 	assert.NotSame(t, l1, l2)
 }
 
+func TestResetClosesPreviousWriter(t *testing.T) {
+	testutil.UseTempDir(t)
+	resetGlobal()
+
+	Reset(&LogOptions{Filename: "prev_test.log"})
+	l1 := Get()
+	require.NotNil(t, l1)
+	require.NotNil(t, l1.closer)
+
+	// Second Reset should close the previous lumberjack writer
+	Reset(&LogOptions{Filename: "next_test.log"})
+	l2 := Get()
+	assert.NotSame(t, l1, l2)
+	assert.NotNil(t, l2.closer)
+}
+
 func TestWithCtx_FromCtx(t *testing.T) {
 	l := newLogger(nil)
 	ctx := WithCtx(context.Background(), l)
