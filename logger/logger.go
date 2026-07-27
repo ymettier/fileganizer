@@ -25,6 +25,7 @@ var (
 // log rotation via lumberjack.
 type Logger struct {
 	*slog.Logger
+	closer io.Closer
 }
 
 // LogOptions controls the logger output format, level, destination, and rotation.
@@ -38,22 +39,23 @@ type LogOptions struct {
 	Compress   bool
 }
 
-// getWriter returns an io.Writer and whether lumberjack rotation is being used.
-func getWriter(opts *LogOptions) (io.Writer, bool) {
+// getWriter returns an io.Writer, an optional io.Closer for cleanup, and whether
+// lumberjack rotation is being used.
+func getWriter(opts *LogOptions) (io.Writer, io.Closer, bool) {
 	filename := ""
 	if opts != nil && opts.Filename != "" {
 		filename = opts.Filename
 	}
 
 	if filename == "" {
-		return os.Stderr, false
+		return os.Stderr, nil, false
 	}
 
 	switch filename {
 	case "stdout":
-		return os.Stdout, false
+		return os.Stdout, nil, false
 	case "stderr": //nolint:goconst
-		return os.Stderr, false
+		return os.Stderr, nil, false
 	}
 
 	l := &lumberjack.Logger{
@@ -63,7 +65,7 @@ func getWriter(opts *LogOptions) (io.Writer, bool) {
 		MaxAge:     opts.MaxAge,
 		Compress:   opts.Compress,
 	}
-	return l, true
+	return l, l, true
 }
 
 func resolveLogLevel(opts *LogOptions) slog.Level {
@@ -90,7 +92,7 @@ func newLogger(opts *LogOptions) *Logger {
 		Level: resolveLogLevel(opts),
 	}
 
-	w, usingLumberjack := getWriter(opts)
+	w, closer, usingLumberjack := getWriter(opts)
 
 	// Create new logger
 	var handler slog.Handler
@@ -99,7 +101,7 @@ func newLogger(opts *LogOptions) *Logger {
 	} else {
 		handler = slog.NewTextHandler(w, handlerOpts)
 	}
-	l := &Logger{slog.New(handler)}
+	l := &Logger{slog.New(handler), closer}
 
 	if opts != nil {
 		attrs := []any{
@@ -124,14 +126,6 @@ func newLogger(opts *LogOptions) *Logger {
 // Get initializes a Logger instance if it has not been initialized
 // already and returns the same instance for subsequent calls.
 func Get() *Logger {
-	mu.RLock()
-	l := logger
-	mu.RUnlock()
-
-	if l != nil {
-		return l
-	}
-
 	mu.Lock()
 	defer mu.Unlock()
 	if logger == nil {
@@ -140,10 +134,14 @@ func Get() *Logger {
 	return logger
 }
 
-// Reset re-initializes the global logger with the provided options.
+// Reset re-initializes the global logger with the provided options,
+// closing the previous logger's writer if it was using log rotation.
 func Reset(opts *LogOptions) {
 	mu.Lock()
 	defer mu.Unlock()
+	if logger != nil && logger.closer != nil {
+		logger.closer.Close()
+	}
 	logger = newLogger(opts)
 }
 

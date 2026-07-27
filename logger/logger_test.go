@@ -101,20 +101,23 @@ func TestGetWriter_File(t *testing.T) {
 	testutil.UseTempDir(t)
 	filename := "lumberjack_test.log"
 
-	w, ok := getWriter(&LogOptions{Filename: filename})
+	w, closer, ok := getWriter(&LogOptions{Filename: filename})
 	require.NotNil(t, w)
+	require.NotNil(t, closer)
 	assert.True(t, ok)
 
 	_, err := w.Write([]byte("test"))
 	assert.NoError(t, err)
+	assert.NoError(t, closer.Close())
 }
 
 func TestGetWriter_FileDefaults(t *testing.T) {
 	testutil.UseTempDir(t)
 	filename := "lumberjack_defaults.log"
 
-	w, ok := getWriter(&LogOptions{Filename: filename, MaxSize: 0, MaxBackups: 0, MaxAge: 0, Compress: false})
+	w, closer, ok := getWriter(&LogOptions{Filename: filename, MaxSize: 0, MaxBackups: 0, MaxAge: 0, Compress: false})
 	assert.NotNil(t, w)
+	assert.NotNil(t, closer)
 	assert.True(t, ok)
 }
 
@@ -187,26 +190,30 @@ func TestNewLogger_LumberjackConfigLog(t *testing.T) {
 }
 
 func TestGetWriter_Stdout(t *testing.T) {
-	w, ok := getWriter(&LogOptions{Filename: "stdout"})
+	w, closer, ok := getWriter(&LogOptions{Filename: "stdout"})
 	assert.NotNil(t, w)
+	assert.Nil(t, closer)
 	assert.False(t, ok)
 }
 
 func TestGetWriter_Stderr(t *testing.T) {
-	w, ok := getWriter(&LogOptions{Filename: "stderr"})
+	w, closer, ok := getWriter(&LogOptions{Filename: "stderr"})
 	assert.NotNil(t, w)
+	assert.Nil(t, closer)
 	assert.False(t, ok)
 }
 
 func TestGetWriter_NilOpts(t *testing.T) {
-	w, ok := getWriter(nil)
+	w, closer, ok := getWriter(nil)
 	assert.NotNil(t, w)
+	assert.Nil(t, closer)
 	assert.False(t, ok)
 }
 
 func TestGetWriter_EmptyFilename(t *testing.T) {
-	w, ok := getWriter(&LogOptions{Filename: ""})
+	w, closer, ok := getWriter(&LogOptions{Filename: ""})
 	assert.NotNil(t, w)
+	assert.Nil(t, closer)
 	assert.False(t, ok)
 }
 
