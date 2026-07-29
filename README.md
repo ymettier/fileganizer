@@ -13,7 +13,7 @@ Fileganizer is a tool that will
 - parse the extracted text with grok-like patterns,
 - choose a pre-configured go-template depending on parsing results,
 - generate a result with go-template,
-- optionaly run the result (as a command).o
+- optionally run the result (as a command).
 
 The use-case is to run some pdftotext command to extract text from your invoices and other similar documents, try to find patterns like IDs, date, name, and rename (move) the file using the results of the parsing.
 
@@ -21,7 +21,7 @@ The use-case is to run some pdftotext command to extract text from your invoices
 
 Copy `config.yaml.sample` as `config.yaml`. Edit the file:
 
-Leave `ExtractTextCommand` as is if you have `pdftotext` installed. Or change it if you prefer using another tool.
+Leave `textExtractor` as is. PDF files are extracted with the built-in parser. If you prefer using an external tool like `pdftotext`, change the `type` to `command` and set the `command` accordingly.
 
 Leave `env` as is or declare other environment variables according to your needs. These environment variables will be available in your go-templates.
 
@@ -33,10 +33,10 @@ Leave `grokPatterns` as is. You may add new patterns later, according to your ne
 
 Now we will work with `fileDescriptions` that contains `patterns` to try to apply on the input file and `output` as a go-template that we configure as a shell command.
 
-1. Run `fileganizer -c config.yaml -f yourfile.pdf -t`. This will print the output of the `ExtractTextCommand`.
+1. Run `fileganizer -c config.yaml -f yourfile.pdf -t`. This will print the output of the `textExtractor`.
 2. identify some interesting patterns, for example a date, an identifier...
 3. add these patterns with grok syntax (learn with [Grok filter plugin from Logstash](https://www.elastic.co/guide/en/logstash/current/plugins-filters-grok.html)). Note that the parser is [Grokky](https://github.com/logrusorgru/grokky) and is not fully compatible with Grok.
-4. forge a go-template output with all avaiable variables (`.filename`, `.env.XXX` for environment variables, `.grok.xxx` for parsed data.
+4. forge a go-template output with all available variables (`.Filename`, `.Env.XXX` for environment variables, `.Grok.xxx` for parsed data).
 5. Run `fileganizer -c config.yaml -f yourfile.pdf` (without the `-t` option). This do all the job and print the generated result.
 
 You can iterate as many times as you need to improve the template. You can also add other `fileDescriptions` to identify other document types and print from other go-templates.
