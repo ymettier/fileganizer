@@ -252,6 +252,10 @@ func TestParseLiteralString_EdgeCases(t *testing.T) {
 		assert.Equal(t, "\377", parseLiteralString("(\\377)"))
 	})
 
+	t.Run("octal escape overflow", func(t *testing.T) {
+		assert.Equal(t, "", parseLiteralString("(\\777)"))
+	})
+
 	t.Run("default escape", func(t *testing.T) {
 		assert.Equal(t, "x", parseLiteralString("(\\x)"))
 	})

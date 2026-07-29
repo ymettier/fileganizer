@@ -221,6 +221,8 @@ func writeEscaped(b *strings.Builder, s string, i int) int {
 			v, _ := strconv.ParseUint(oct, 8, 32)
 			if v <= maxByte {
 				b.WriteByte(byte(v))
+			} else {
+				logger.Get().Warn("invalid octal escape in PDF literal string, value exceeds byte range", "value", v, "octal", oct)
 			}
 		} else {
 			b.WriteByte(s[i])
