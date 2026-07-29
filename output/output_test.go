@@ -13,40 +13,42 @@ var months = map[string][]string{
 	"French": {"Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Aout", "Septembre", "Octobre", "Novembre", "Décembre"},
 }
 
-var vars = map[string]any{
-	"year":       "1970",
-	"identifier": "123",
+var testVars = TemplateData{
+	Grok: map[string]string{
+		"year":       "1970",
+		"identifier": "123",
+	},
 }
 
 var templates = map[string]string{
-	"year 1970 identifier 123": `year {{ .year }} identifier {{ .identifier }}`,
-	"year 1970 lowercase":      `year {{ .year }} {{ ToLower "LoWerCaSe" }}`,
-	"year 1970 UPPERCASE":      `year {{ .year }} {{ ToUpper "UppErCaSe" }}`,
-	"year 1970 month 03":       `year {{ .year }} month {{ MonthIndex "Mars" }}`,
+	"year 1970 identifier 123": `year {{ .Grok.year }} identifier {{ .Grok.identifier }}`,
+	"year 1970 lowercase":      `year {{ .Grok.year }} {{ ToLower "LoWerCaSe" }}`,
+	"year 1970 UPPERCASE":      `year {{ .Grok.year }} {{ ToUpper "UppErCaSe" }}`,
+	"year 1970 month 03":       `year {{ .Grok.year }} month {{ MonthIndex "Mars" }}`,
 }
 
 func TestFromTemplate(t *testing.T) {
 	for wants, tpl := range templates {
 		o := New(tpl, months)
 
-		r, err := o.FromTemplate("", vars)
+		r, err := o.FromTemplate("", testVars)
 		assert.NoErrorf(t, err, "Fails on template '%s'", tpl)
 		assert.Equalf(t, wants+"\n", r, "Fails on template '%s'", tpl)
 	}
 }
 
 func TestFromTemplateWithCommonTemplate(t *testing.T) {
-	o := New("year {{ .year }}", months)
+	o := New("year {{ .Grok.year }}", months)
 
-	r, err := o.FromTemplate("{{ .identifier }}", vars)
+	r, err := o.FromTemplate("{{ .Grok.identifier }}", testVars)
 	assert.NoError(t, err)
 	assert.Equal(t, "year 1970\n123", r)
 }
 
 func TestFromTemplateWithBrokenTemplate(t *testing.T) {
-	o := New("year {{ .year }}", months)
+	o := New("year {{ .Grok.year }}", months)
 
-	_, err := o.FromTemplate("{{", vars)
+	_, err := o.FromTemplate("{{", testVars)
 	assert.Error(t, err)
 }
 
@@ -54,14 +56,14 @@ func TestFromTemplate_ExecuteError(t *testing.T) {
 	o := New("", nil)
 
 	// ToUpper expects a string; passing an int causes a type error at execution
-	_, err := o.FromTemplate("{{ ToUpper 42 }}", nil)
+	_, err := o.FromTemplate("{{ ToUpper 42 }}", TemplateData{})
 	assert.Error(t, err)
 }
 
 func TestFromTemplate_NowFunctions(t *testing.T) {
 	o := New("{{ NowYYYY }}-{{ NowYYYYMMDD }}-{{ NowYYYYMMDD_HHMMSS }}", nil)
 
-	r, err := o.FromTemplate("", nil)
+	r, err := o.FromTemplate("", TemplateData{})
 	assert.NoError(t, err)
 	assert.Regexp(t, `^\d{4}-\d{8}-\d{8}_\d{6}\n$`, r)
 }
