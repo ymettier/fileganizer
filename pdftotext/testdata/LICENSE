@@ -4,3 +4,4 @@ SPDX-License-Identifier: MIT
 Test data licenses:
 - forged-invoice.pdf: MIT (Fileganizer project, created for testing)
 - bsb-*-statement.pdf: MIT (https://github.com/bankstatemently/bank-statement-parsing-benchmark)
+- control-char.pdf: MIT (Fileganizer project, created for testing)

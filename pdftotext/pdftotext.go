@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -33,6 +34,25 @@ const (
 // maxByte is the maximum value an uint8 can hold, used for bounds checking
 // when converting parsed octal escape values from PDF literal strings.
 const maxByte = 255
+
+// spaceChar is the character code for the space glyph in simple fonts.
+const spaceChar = 32
+
+// Text extraction constants for adaptive word gap detection.
+const (
+	maxCharAdvances   = 50  // maximum recent advances to track
+	lowerFallback     = 40  // fallback threshold for first few advances on a line
+	minThreshold      = 30  // minimum word gap threshold
+	fallbackThreshold = 100 // fallback for lines with too few advances
+
+	emScale     = 1000.0 // font units per em
+	spaceRatio  = 0.3    // word gap threshold as fraction of space width
+	fontSizeDef = 0.04   // fallback word gap threshold as fraction of font size
+)
+
+// fontWidths holds glyph widths for a simple font (Type1/TrueType).
+// Indexed by character code from 0-255.
+type fontWidths [256]uint16
 
 type pdfToken struct {
 	kind byte
@@ -178,6 +198,9 @@ func (s *contentScanner) readKeyword() (pdfToken, bool) {
 		}
 		s.pos++
 	}
+	if s.pos == start {
+		s.pos++
+	}
 	return pdfToken{kind: tokKw, raw: string(s.data[start:s.pos])}, true
 }
 
@@ -292,10 +315,10 @@ func parseBFCharInto(s *contentScanner, m map[uint16]rune) {
 			code = []byte(parseLiteralString(tok.raw))
 		}
 		if len(srcCID) >= 2 && len(code) >= 2 {
-			cid := uint16(srcCID[0])<<8 | uint16(srcCID[1])
-			m[cid] = rune(uint16(code[0])<<8 | uint16(code[1]))
+			cid := cidToUint16(srcCID)
+			m[cid] = rune(cidToUint16(code))
 		} else if len(srcCID) >= 2 && len(code) >= 1 {
-			cid := uint16(srcCID[0])<<8 | uint16(srcCID[1])
+			cid := cidToUint16(srcCID)
 			m[cid] = rune(code[0])
 		}
 	}
@@ -334,11 +357,11 @@ func parseBFRangeInto(s *contentScanner, m map[uint16]rune) {
 
 func addBFRangeContinuous(m map[uint16]rune, startCID, endCID, val []byte) {
 	if len(startCID) >= 2 && len(endCID) >= 2 && len(val) >= 1 {
-		lo := uint16(startCID[0])<<8 | uint16(startCID[1])
-		hi := uint16(endCID[0])<<8 | uint16(endCID[1])
+		lo := cidToUint16(startCID)
+		hi := cidToUint16(endCID)
 		var baseRune rune
 		if len(val) >= 2 {
-			baseRune = rune(uint16(val[0])<<8 | uint16(val[1]))
+			baseRune = rune(cidToUint16(val))
 		} else {
 			baseRune = rune(val[0])
 		}
@@ -360,16 +383,21 @@ func addBFRangeList(s *contentScanner, m map[uint16]rune, startCID []byte) {
 		}
 	}
 	if len(startCID) >= 2 {
-		lo := uint16(startCID[0])<<8 | uint16(startCID[1])
+		lo := cidToUint16(startCID)
 		for i, val := range vals {
 			cid := lo + uint16(i)
 			if len(val) >= 2 {
-				m[cid] = rune(uint16(val[0])<<8 | uint16(val[1]))
+				m[cid] = rune(cidToUint16(val))
 			} else if len(val) >= 1 {
 				m[cid] = rune(val[0])
 			}
 		}
 	}
+}
+
+// cidToUint16 converts a 2-byte CID to uint16.
+func cidToUint16(b []byte) uint16 {
+	return uint16(b[0])<<8 | uint16(b[1])
 }
 
 // decodeText decodes CID bytes using a CID→rune map.
@@ -399,11 +427,73 @@ func decodeText(data []byte, cmap map[uint16]rune) string {
 
 // textFromContentStream parses a PDF content stream and extracts text strings
 // using the provided font ToUnicode maps (fontResourceName -> CID→rune).
-func textFromContentStream(content []byte, fontCMaps map[string]map[uint16]rune) string {
+func textFromContentStream( //nolint:gocyclo,funlen
+	content []byte, fontCMaps map[string]map[uint16]rune, fWidths map[string]*fontWidths,
+) string {
 	s := &contentScanner{data: content}
 	var stack []pdfToken
 	var currentFont string
 	var out strings.Builder
+
+	// Text state for position tracking
+	var (
+		textX        float64 = 0
+		textY        float64 = 0
+		lastTextX    float64 = -1
+		lastTextY    float64 = -1
+		fontSize     float64
+		pendingText  string
+		lastCharCode byte      // last character code flushed (for font metric word gap detection)
+		charAdvances []float64 // recent character advances for adaptive word gap detection
+	)
+
+	flushPending := func() {
+		if pendingText == "" {
+			return
+		}
+
+		wordGap := false
+
+		// Font metric word gap detection: subtract previous glyph width from Td advance
+		// to compute extra spacing. The advance (textX - lastTextX) is the Td value
+		// from the previous character end to the current character start. Subtracting
+		// the previous glyph width gives the extra white space between characters.
+		if fw, ok := fWidths[currentFont]; ok && fontSize > 0 && lastTextX >= 0 && textY == lastTextY {
+			if int(lastCharCode) < len(fw) && fw[lastCharCode] > 0 {
+				charWidth := float64(fw[lastCharCode]) / emScale * fontSize
+				advance := textX - lastTextX
+				extra := advance - charWidth
+				// Compute threshold: 30% of space character width or 4% of font size
+				threshold := fontSize * fontSizeDef
+				if spaceChar < len(fw) && fw[spaceChar] > 0 {
+					spaceWidth := float64(fw[spaceChar]) / emScale * fontSize
+					if spaceWidth*spaceRatio > threshold {
+						threshold = spaceWidth * spaceRatio
+					}
+				}
+				if extra > threshold {
+					wordGap = true
+				}
+			}
+		}
+
+		// Fallback: threshold-based word gap detection when font metrics unavailable
+		if !wordGap && lastTextX >= 0 && textY == lastTextY && len(charAdvances) >= 3 {
+			advance := textX - lastTextX
+			if advance > getWordGapThreshold(charAdvances) {
+				wordGap = true
+			}
+		}
+
+		if wordGap {
+			out.WriteByte(' ')
+		}
+		out.WriteString(pendingText)
+		lastCharCode = pendingText[len(pendingText)-1]
+		lastTextX = textX
+		lastTextY = textY
+		pendingText = ""
+	}
 
 	for {
 		tok, ok := s.next()
@@ -412,6 +502,7 @@ func textFromContentStream(content []byte, fontCMaps map[string]map[uint16]rune)
 		}
 
 		if tok.kind == tokArr && tok.raw == "[" {
+			flushPending()
 			out.WriteString(collectTextFromArray(s, fontCMaps, currentFont))
 			continue
 		}
@@ -422,19 +513,67 @@ func textFromContentStream(content []byte, fontCMaps map[string]map[uint16]rune)
 				if len(stack) >= 2 && stack[len(stack)-2].kind == tokName {
 					currentFont = strings.TrimPrefix(stack[len(stack)-2].raw, "/")
 				}
+				if len(stack) >= 1 && stack[len(stack)-1].kind == tokNum {
+					fs, err := strconv.ParseFloat(stack[len(stack)-1].raw, 64)
+					if err == nil {
+						fontSize = fs
+					}
+				}
+
+			case "Tw":
+				// Word spacing - not used in position tracking for word gap detection
+				// but we parse to keep stack in sync
+				if len(stack) >= 1 && stack[len(stack)-1].kind == tokNum {
+					_, _ = strconv.ParseFloat(stack[len(stack)-1].raw, 64)
+				}
 
 			case "Td", "TD":
+				flushPending()
 				if len(stack) >= 2 {
-					last := stack[len(stack)-1]
-					if last.kind == tokNum && last.raw != "0" {
-						out.WriteByte('\n')
+					ty := stack[len(stack)-1]
+					tx := stack[len(stack)-2]
+					if tx.kind == tokNum && ty.kind == tokNum {
+						txVal, txErr := strconv.ParseFloat(tx.raw, 64)
+						tyVal, tyErr := strconv.ParseFloat(ty.raw, 64)
+						if txErr == nil {
+							// Track character advance for word gap detection
+							// Track on same line; reset tracking on line break (ty != 0)
+							if tyErr == nil && tyVal == 0 && txVal > 0 {
+								// Same line, positive advance
+								if lastTextX >= 0 && textY == lastTextY {
+									charAdvances = append(charAdvances, txVal)
+								} else if lastTextX < 0 {
+									// First text on page/line
+									charAdvances = append(charAdvances, txVal)
+								}
+								if len(charAdvances) > maxCharAdvances {
+									charAdvances = charAdvances[len(charAdvances)-maxCharAdvances:]
+								}
+							}
+							textX += txVal
+						}
+						if tyErr == nil {
+							if tyVal != 0 {
+								textY += tyVal
+								// Line break: reset lastTextX for new line
+								lastTextX = -1
+								out.WriteByte('\n')
+							}
+						}
 					}
 				}
 
 			case "Tj", "'", "\"":
-				out.WriteString(writeTextFromStack(stack, fontCMaps, currentFont))
+				txt := writeTextFromStack(stack, fontCMaps, currentFont)
+				if txt != "" {
+					pendingText += txt
+					// Don't estimate advance here - Td tells us actual position
+				}
 
 			case "TJ":
+				flushPending()
+				// TJ array handled in collectTextFromArray which already processes it
+				// but we need to track position - just skip for now
 			}
 
 			stack = stack[:0]
@@ -443,6 +582,7 @@ func textFromContentStream(content []byte, fontCMaps map[string]map[uint16]rune)
 		}
 	}
 
+	flushPending()
 	return out.String()
 }
 
@@ -459,6 +599,10 @@ func collectTextFromArray(s *contentScanner, fontCMaps map[string]map[uint16]run
 		case tokHex:
 			cmap := fontCMaps[currentFont]
 			texts = append(texts, decodeText(parseHexString(el.raw), cmap))
+		case tokNum:
+			if val, err := strconv.ParseFloat(el.raw, 64); err == nil && val < 0 {
+				texts = append(texts, " ")
+			}
 		}
 	}
 	return strings.Join(texts, "")
@@ -509,8 +653,9 @@ func PDFTextExtract(ctx context.Context, filename string) (string, error) {
 		data, _ := io.ReadAll(r)
 
 		fontCMaps := buildFontCMaps(pdfCtx, pageNr)
+		fWidths := buildFontWidths(pdfCtx, pageNr)
 
-		pageText := textFromContentStream(data, fontCMaps)
+		pageText := textFromContentStream(data, fontCMaps, fWidths)
 		if pageText != "" {
 			text.WriteString(pageText)
 			text.WriteByte('\n')
@@ -547,6 +692,73 @@ func buildFontCMaps(ctx *model.Context, pageNr int) map[string]map[uint16]rune {
 	}
 
 	return result
+}
+
+// buildFontWidths builds font resource name → glyph widths for a given page.
+func buildFontWidths(ctx *model.Context, pageNr int) map[string]*fontWidths {
+	result := make(map[string]*fontWidths)
+
+	if pageNr < 1 || pageNr > len(ctx.Optimize.PageFonts) {
+		return result
+	}
+
+	pageFonts := ctx.Optimize.PageFonts[pageNr-1]
+
+	for objNr := range pageFonts {
+		fo, ok := ctx.Optimize.FontObjects[objNr]
+		if !ok {
+			continue
+		}
+
+		fw := fontWidthsFromDict(fo.FontDict)
+		if fw == nil {
+			continue
+		}
+
+		for _, resName := range fo.ResourceNames {
+			result[resName] = fw
+		}
+	}
+
+	return result
+}
+
+// fontWidthsFromDict extracts glyph widths from a font dictionary.
+func fontWidthsFromDict(fd types.Dict) *fontWidths {
+	w, found := fd.Find("Widths")
+	if !found || w == nil {
+		return nil
+	}
+	arr, ok := w.(types.Array)
+	if !ok || len(arr) == 0 {
+		return nil
+	}
+
+	firstChar := 0
+	if v, found := fd.Find("FirstChar"); found {
+		if i, ok := v.(types.Integer); ok {
+			firstChar = i.Value()
+		}
+	}
+
+	var fw fontWidths
+	for i, v := range arr {
+		code := firstChar + i
+		if code > maxByte {
+			break
+		}
+		if code < 0 {
+			continue
+		}
+		if iv, ok := v.(types.Integer); ok {
+			val := iv.Value()
+			if val >= 0 && val <= 65535 {
+				fw[code] = uint16(val)
+			}
+		}
+	}
+
+	return &fw
 }
 
 // cidToUnicode extracts a CID→rune map from a font dictionary by reading its
@@ -599,4 +811,33 @@ func resolveToUnicode(ctx *model.Context, obj types.Object) map[uint16]rune {
 	}
 
 	return toUnicodeMap(sd.Content)
+}
+
+// getWordGapThreshold returns the minimum advance to consider a word gap.
+// Uses 1.5x the median of recent character advances, minimum 30, or 40 as fallback.
+func getWordGapThreshold(advances []float64) float64 {
+	if len(advances) < 3 {
+		return lowerFallback
+	}
+	median := medianAdvance(advances)
+	threshold := median * 1.5
+	if threshold < minThreshold {
+		threshold = minThreshold
+	}
+	return threshold
+}
+
+// medianAdvance returns the median of character advances.
+func medianAdvance(advances []float64) float64 {
+	if len(advances) == 0 {
+		return fallbackThreshold
+	}
+	sorted := make([]float64, len(advances))
+	copy(sorted, advances)
+	sort.Float64s(sorted)
+	n := len(sorted)
+	if n%2 == 0 {
+		return (sorted[n/2-1] + sorted[n/2]) / 2
+	}
+	return sorted[n/2]
 }

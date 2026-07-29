@@ -6,6 +6,7 @@ package pdftotext
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/pdfcpu/pdfcpu/pkg/api"
@@ -20,6 +21,8 @@ import (
 const (
 	testdataDir         = "testdata"
 	testDescendantFonts = "DescendantFonts"
+	testWidths          = "Widths"
+	testFirstChar       = "FirstChar"
 )
 
 func TestPDFTextExtract(t *testing.T) {
@@ -74,6 +77,17 @@ func TestPDFTextExtract(t *testing.T) {
 		assert.Contains(t, output, "10 426,76")
 		assert.Contains(t, output, "30 avril 2025")
 	})
+
+	t.Run("per-character Tj+Td word gap detection", func(t *testing.T) {
+		// Synthetic PDF where each character is rendered individually via Tj+Td.
+		// Word boundaries are encoded only in the Td advances, not in the text.
+		// Without font metric word gap detection, the output would be "1RUEDERENNES".
+		output, err := PDFTextExtract(context.Background(), "testdata/per-char-test.pdf")
+		require.NoError(t, err)
+		output = strings.TrimSpace(output)
+
+		assert.Equal(t, "1 RUE DE RENNES", output)
+	})
 }
 
 func TestPDFTextExtractFileNotFound(t *testing.T) {
@@ -93,37 +107,37 @@ func TestPDFTextExtractBadFile(t *testing.T) {
 func TestTextFromContentStream(t *testing.T) {
 	t.Run("literal Tj", func(t *testing.T) {
 		content := []byte("BT\n/F1 12 Tf\n100 700 Td\n(Hello World) Tj\nET\n")
-		text := textFromContentStream(content, nil)
+		text := textFromContentStream(content, nil, nil)
 		assert.Contains(t, text, "Hello World")
 	})
 
 	t.Run("hex Tj", func(t *testing.T) {
 		content := []byte("<48656C6C6F> Tj")
-		text := textFromContentStream(content, nil)
+		text := textFromContentStream(content, nil, nil)
 		assert.Contains(t, text, "Hello")
 	})
 
 	t.Run("TJ array", func(t *testing.T) {
 		content := []byte("[(Hello)(World)]TJ")
-		text := textFromContentStream(content, nil)
+		text := textFromContentStream(content, nil, nil)
 		assert.Contains(t, text, "Hello")
 		assert.Contains(t, text, "World")
 	})
 
 	t.Run("empty", func(t *testing.T) {
-		text := textFromContentStream(nil, nil)
+		text := textFromContentStream(nil, nil, nil)
 		assert.Equal(t, "", text)
 	})
 
 	t.Run("single quote literal", func(t *testing.T) {
 		content := []byte("(Hello World)'")
-		text := textFromContentStream(content, nil)
+		text := textFromContentStream(content, nil, nil)
 		assert.Contains(t, text, "Hello World")
 	})
 
 	t.Run("single quote hex", func(t *testing.T) {
 		content := []byte("<48656C6C6F>'")
-		text := textFromContentStream(content, nil)
+		text := textFromContentStream(content, nil, nil)
 		assert.Contains(t, text, "Hello")
 	})
 }
@@ -228,7 +242,7 @@ func TestNext_Operators(t *testing.T) {
 
 	t.Run("escaped char in literal string", func(t *testing.T) {
 		content := []byte("(Hello\\nWorld) Tj")
-		text := textFromContentStream(content, nil)
+		text := textFromContentStream(content, nil, nil)
 		assert.Equal(t, "Hello\nWorld", text)
 	})
 }
@@ -674,13 +688,13 @@ func TestResolveToUnicode_DecodeCorruptedStream(t *testing.T) {
 func TestTextFromContentStream_WriteTextEdgeCases(t *testing.T) {
 	t.Run("empty stack", func(t *testing.T) {
 		content := []byte("Tj")
-		text := textFromContentStream(content, nil)
+		text := textFromContentStream(content, nil, nil)
 		assert.Empty(t, text)
 	})
 
 	t.Run("non_string_token", func(t *testing.T) {
 		content := []byte("/Name Tj")
-		text := textFromContentStream(content, nil)
+		text := textFromContentStream(content, nil, nil)
 		assert.Empty(t, text)
 	})
 }
@@ -688,13 +702,198 @@ func TestTextFromContentStream_WriteTextEdgeCases(t *testing.T) {
 func TestTextFromContentStream_DQuote(t *testing.T) {
 	t.Run("literal string", func(t *testing.T) {
 		content := []byte("(Hello World)\"")
-		text := textFromContentStream(content, nil)
+		text := textFromContentStream(content, nil, nil)
 		assert.Contains(t, text, "Hello World")
 	})
 
 	t.Run("hex string", func(t *testing.T) {
 		content := []byte("<48656C6C6F>\"")
-		text := textFromContentStream(content, nil)
+		text := textFromContentStream(content, nil, nil)
 		assert.Contains(t, text, "Hello")
 	})
+}
+
+func TestReadKeyword_ControlChar(t *testing.T) {
+	t.Run("control char advances pos", func(t *testing.T) {
+		s := &contentScanner{data: []byte{0x03, 0x41}}
+		tok, ok := s.next()
+		assert.True(t, ok)
+		assert.Equal(t, byte(tokKw), tok.kind)
+		assert.Equal(t, "\x03", tok.raw)
+		assert.Equal(t, 1, s.pos)
+	})
+
+	t.Run("control char in stream does not hang", func(t *testing.T) {
+		content := []byte("BT\n/F1 12 Tf\n100 700 Td\n(Hello World) Tj\n\x03\xF0\x3F\x03\xF0\x3FET\n")
+		text := textFromContentStream(content, nil, nil)
+		assert.Contains(t, text, "Hello World")
+	})
+}
+
+func TestPDFTextExtract_ControlChar(t *testing.T) {
+	output, err := PDFTextExtract(context.Background(), testdataDir+"/control-char.pdf")
+	require.NoError(t, err)
+
+	assert.Contains(t, output, "Hello World")
+}
+
+func TestBuildFontWidths_InvalidPage(t *testing.T) {
+	conf := model.NewDefaultConfiguration()
+	f, err := os.Open(testdataDir + "/forged-invoice.pdf")
+	require.NoError(t, err)
+	defer f.Close()
+	pdfCtx, err := api.ReadValidateAndOptimize(f, conf)
+	require.NoError(t, err)
+
+	assert.Empty(t, buildFontWidths(pdfCtx, 0))
+	assert.Empty(t, buildFontWidths(pdfCtx, 9999))
+}
+
+func TestBuildFontWidths_MissingFontObject(t *testing.T) {
+	conf := model.NewDefaultConfiguration()
+	f, err := os.Open(testdataDir + "/forged-invoice.pdf")
+	require.NoError(t, err)
+	defer f.Close()
+	pdfCtx, err := api.ReadValidateAndOptimize(f, conf)
+	require.NoError(t, err)
+
+	pdfCtx.Optimize.PageFonts[0][9999] = true
+	m := buildFontWidths(pdfCtx, 1)
+	assert.NotNil(t, m)
+}
+
+func TestFontWidthsFromDict_EdgeCases(t *testing.T) {
+	t.Run("missing Widths", func(t *testing.T) {
+		fd := types.Dict{}
+		assert.Nil(t, fontWidthsFromDict(fd))
+	})
+
+	t.Run("Widths not array", func(t *testing.T) {
+		fd := types.Dict{testWidths: types.Integer(0)}
+		assert.Nil(t, fontWidthsFromDict(fd))
+	})
+
+	t.Run("code > maxByte", func(t *testing.T) {
+		widths := make(types.Array, 257)
+		for i := range widths {
+			widths[i] = types.Integer(500)
+		}
+		fd := types.Dict{
+			testWidths:    widths,
+			testFirstChar: types.Integer(0),
+		}
+		fw := fontWidthsFromDict(fd)
+		require.NotNil(t, fw)
+		assert.Equal(t, uint16(500), fw[0])
+		assert.Equal(t, uint16(500), fw[255])
+	})
+
+	t.Run("code < 0", func(t *testing.T) {
+		fd := types.Dict{
+			testWidths:    types.Array{types.Integer(500)},
+			testFirstChar: types.Integer(-1),
+		}
+		fw := fontWidthsFromDict(fd)
+		require.NotNil(t, fw)
+		assert.Equal(t, uint16(0), fw[0])
+	})
+
+	t.Run("non-integer in Widths array", func(t *testing.T) {
+		fd := types.Dict{
+			testWidths:    types.Array{types.Name("test")},
+			testFirstChar: types.Integer(0),
+		}
+		fw := fontWidthsFromDict(fd)
+		require.NotNil(t, fw)
+		assert.Equal(t, uint16(0), fw[0])
+	})
+
+	t.Run("empty Widths array", func(t *testing.T) {
+		fd := types.Dict{testWidths: types.Array{}}
+		assert.Nil(t, fontWidthsFromDict(fd))
+	})
+
+	t.Run("FirstChar not integer", func(t *testing.T) {
+		fd := types.Dict{
+			testWidths:    types.Array{types.Integer(500)},
+			testFirstChar: types.Name("test"),
+		}
+		fw := fontWidthsFromDict(fd)
+		require.NotNil(t, fw)
+		assert.Equal(t, uint16(500), fw[0])
+	})
+}
+
+func TestGetWordGapThreshold(t *testing.T) {
+	t.Run("fewer than 3 advances", func(t *testing.T) {
+		assert.Equal(t, 40.0, getWordGapThreshold([]float64{10}))
+		assert.Equal(t, 40.0, getWordGapThreshold([]float64{10, 20}))
+	})
+
+	t.Run("threshold below minimum", func(t *testing.T) {
+		// median=10, threshold=15, <30 → returns 30
+		assert.Equal(t, 30.0, getWordGapThreshold([]float64{10, 10, 10}))
+	})
+
+	t.Run("normal threshold", func(t *testing.T) {
+		// median=30, threshold=45, >30 → returns 45
+		assert.Equal(t, 45.0, getWordGapThreshold([]float64{30, 30, 30}))
+	})
+}
+
+func TestMedianAdvance_EdgeCases(t *testing.T) {
+	t.Run("empty", func(t *testing.T) {
+		assert.Equal(t, 100.0, medianAdvance(nil))
+		assert.Equal(t, 100.0, medianAdvance([]float64{}))
+	})
+
+	t.Run("single element", func(t *testing.T) {
+		assert.Equal(t, 10.0, medianAdvance([]float64{10}))
+	})
+
+	t.Run("odd count", func(t *testing.T) {
+		assert.Equal(t, 20.0, medianAdvance([]float64{10, 20, 30}))
+	})
+
+	t.Run("even count", func(t *testing.T) {
+		assert.Equal(t, 25.0, medianAdvance([]float64{10, 20, 30, 40}))
+	})
+}
+
+func TestTextFromContentStream_FallbackWordGap(t *testing.T) {
+	// Without font widths, fallback threshold-based word gap detection
+	// fires when Td advance exceeds median*1.5 (min 30).
+	// 3 advances of 10 → median=10 → threshold=30.
+	// Advance of 50 from last flush to "d" → 50 > 30 → word gap.
+	content := []byte("BT /F1 12 Tf 0 0 Td (a) Tj 10 0 Td (b) Tj 10 0 Td (c) Tj 50 0 Td (d) Tj ET")
+	text := textFromContentStream(content, nil, nil)
+	assert.Equal(t, "abc d", text)
+}
+
+func TestTextFromContentStream_TwOperator(t *testing.T) {
+	content := []byte("BT /F1 12 Tf 0 0 Td (Hello) Tj 10 0 Tw ET")
+	text := textFromContentStream(content, nil, nil)
+	assert.Contains(t, text, "Hello")
+}
+
+func TestTextFromContentStream_FirstAdvanceOnLine(t *testing.T) {
+	// First Td with no preceding text keeps lastTextX=-1.
+	// Second Td on same line with positive advance triggers
+	// else if lastTextX < 0 branch.
+	content := []byte("BT /F1 12 Tf 0 0 Td 10 0 Td (a) Tj ET")
+	text := textFromContentStream(content, nil, nil)
+	assert.Equal(t, "a", text)
+}
+
+func TestTextFromContentStream_MaxCharAdvances(t *testing.T) {
+	// 55 advances to trigger truncation (maxCharAdvances=50)
+	var sb strings.Builder
+	sb.WriteString("BT /F1 12 Tf 0 0 Td")
+	for i := range 55 {
+		sb.WriteString("(x) Tj 10 0 Td")
+		_ = i
+	}
+	sb.WriteString(" ET")
+	text := textFromContentStream([]byte(sb.String()), nil, nil)
+	assert.Len(t, text, 55)
 }
