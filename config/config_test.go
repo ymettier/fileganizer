@@ -4,7 +4,9 @@
 package config
 
 import (
+	"errors"
 	"os"
+	"runtime/debug"
 	"strings"
 	"testing"
 
@@ -23,25 +25,75 @@ func TestVersion(t *testing.T) {
 	assert.Equal(t, "Version        : "+wantedVersion, s[0], "Printing version")
 }
 
-func TestNewVersionFlag(t *testing.T) {
-	setArgs(t, "fileganizer", "-V")
+func TestVersionReadBuildInfoFails(t *testing.T) {
+	origReadBuildInfo := readBuildInfo
+	defer func() { readBuildInfo = origReadBuildInfo }()
 
-	cfg, err := New("1.2.3")
+	readBuildInfo = func() (*debug.BuildInfo, bool) {
+		return nil, false
+	}
+
+	output := formatVersion("1.0")
+	assert.Contains(t, output, "Version        : 1.0")
+	assert.NotContains(t, output, "Revision")
+	assert.NotContains(t, output, "Go Version")
+}
+
+func TestVersionWithBuildInfo(t *testing.T) {
+	origReadBuildInfo := readBuildInfo
+	defer func() { readBuildInfo = origReadBuildInfo }()
+
+	readBuildInfo = func() (*debug.BuildInfo, bool) {
+		return &debug.BuildInfo{
+			GoVersion: "go1.21.0",
+			Settings: []debug.BuildSetting{
+				{Key: "vcs.revision", Value: "abc123"},
+				{Key: "vcs.time", Value: "2024-01-15T10:30:00Z"}, //nolint:goconst
+				{Key: "vcs.modified", Value: "true"},
+				{Key: "vcs.unknown", Value: ""},
+			},
+		}, true
+	}
+
+	output := formatVersion("2.0")
+	assert.Contains(t, output, "Version        : 2.0")
+	assert.Contains(t, output, "Revision       : abc123")
+	assert.Contains(t, output, "Dirty Build    : true")
+	assert.Contains(t, output, "Go Version     : go1.21.0")
+}
+
+func TestVersionWithInvalidVcsTime(t *testing.T) {
+	origReadBuildInfo := readBuildInfo
+	defer func() { readBuildInfo = origReadBuildInfo }()
+
+	readBuildInfo = func() (*debug.BuildInfo, bool) {
+		return &debug.BuildInfo{
+			GoVersion: "go1.21.0",
+			Settings: []debug.BuildSetting{
+				{Key: "vcs.time", Value: "not-a-date"},
+			},
+		}, true
+	}
+
+	output := formatVersion("3.0")
+	assert.Contains(t, output, "Last Commit    : not-a-date (raw)")
+}
+
+func TestNewVersionFlag(t *testing.T) {
+	cfg, err := New("1.2.3", []string{"-V"})
 	assert.ErrorIs(t, err, ErrVersionRequested)
 	assert.Empty(t, cfg.InputFile)
 }
 
 func TestNewMissingRequiredFlags(t *testing.T) {
 	t.Run("missing config flag", func(t *testing.T) {
-		setArgs(t, "fileganizer", "-f", "input.txt")
-		_, err := New("1.0")
+		_, err := New("1.0", []string{"-f", "input.txt"}) //nolint:goconst
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "--config/-c")
 	})
 
 	t.Run("missing file flag", func(t *testing.T) {
-		setArgs(t, "fileganizer", "-c", "config.yaml")
-		_, err := New("1.0")
+		_, err := New("1.0", []string{"-c", "config.yaml"}) //nolint:goconst
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "--file/-f")
 	})
@@ -53,13 +105,6 @@ func writeConfig(t *testing.T, content string) {
 	require.NoError(t, err)
 }
 
-func setArgs(t *testing.T, args ...string) {
-	t.Helper()
-	oldArgs := os.Args
-	os.Args = args
-	t.Cleanup(func() { os.Args = oldArgs })
-}
-
 func setEnv(t *testing.T, key, value string) {
 	t.Helper()
 	os.Setenv(key, value)
@@ -69,7 +114,9 @@ func setEnv(t *testing.T, key, value string) {
 func TestNewWithDefaults(t *testing.T) {
 	testutil.UseTempDir(t)
 	configContent := `
-ExtractTextCommand: ["cat", "FILENAME"]
+textExtractor:
+  "text/plain":
+    type: builtin
 commonTemplate: "prefix"
 months:
   MONTHSENGLISH: ["January"]
@@ -82,15 +129,18 @@ fileDescriptions:
     output: "{{ .grok.id }}"
 `
 	writeConfig(t, configContent)
-	setArgs(t, "fileganizer", "-c", "test_config.yaml", "-f", "input.txt")
 
-	cfg, err := New("1.0")
+	cfg, err := New("1.0", []string{"-c", "test_config.yaml", "-f", "input.txt"}) //nolint:goconst
 	require.NoError(t, err)
 
 	assert.Equal(t, "input.txt", cfg.InputFile)
 	assert.False(t, cfg.TextOutput)
 	assert.False(t, cfg.NoDryRun)
-	assert.Equal(t, []string{"cat", "FILENAME"}, cfg.ExtractTextCommand)
+	assert.Len(t, cfg.TextExtractors, 1)
+	te, ok := cfg.TextExtractors["text/plain"]
+	assert.True(t, ok)
+	assert.Equal(t, "builtin", te.Type)
+	assert.Nil(t, te.Command)
 	assert.Equal(t, "prefix", cfg.CommonTemplate)
 	assert.Contains(t, cfg.Months, "MONTHSENGLISH")
 	assert.Contains(t, cfg.GrokPatterns, "NUMBER")
@@ -103,8 +153,11 @@ fileDescriptions:
 
 func TestNewTextOutputAndRunFlags(t *testing.T) {
 	testutil.UseTempDir(t)
+	//nolint:goconst // common test config
 	configContent := `
-ExtractTextCommand: ["cat", "FILENAME"]
+textExtractor:
+  "text/plain":
+    type: builtin
 fileDescriptions:
   test:
     patterns:
@@ -112,40 +165,146 @@ fileDescriptions:
     output: "{{ .grok.id }}"
 `
 	writeConfig(t, configContent)
-	setArgs(t, "fileganizer", "-c", "test_config.yaml", "-f", "input.txt", "-t", "-r")
 
-	cfg, err := New("1.0")
+	cfg, err := New("1.0", []string{"-c", "test_config.yaml", "-f", "input.txt", "-t", "-r"})
 	require.NoError(t, err)
 
 	assert.True(t, cfg.TextOutput)
 	assert.True(t, cfg.NoDryRun)
 }
 
-func TestNewMissingExtractTextCommand(t *testing.T) {
+func TestNewWithTextExtractorTypeBuiltin(t *testing.T) {
 	testutil.UseTempDir(t)
 	configContent := `
-commonTemplate: "prefix"
+textExtractor:
+  "application/pdf":
+    type: builtin
+fileDescriptions:
+  test:
+    patterns:
+      - "%{NUMBER:id}"
+    output: "{{ .grok.id }}"
 `
 	writeConfig(t, configContent)
-	setArgs(t, "fileganizer", "-c", "test_config.yaml", "-f", "input.txt")
 
-	_, err := New("1.0")
+	cfg, err := New("1.0", []string{"-c", "test_config.yaml", "-f", "input.txt"})
+	require.NoError(t, err)
+
+	te, ok := cfg.TextExtractors["application/pdf"]
+	assert.True(t, ok)
+	assert.Equal(t, "builtin", te.Type)
+	assert.Nil(t, te.Command)
+}
+
+func TestNewWithTextExtractorTypeCommand(t *testing.T) {
+	testutil.UseTempDir(t)
+	configContent := `
+textExtractor:
+  "text/plain":
+    type: command
+    command: ["cat", "FILENAME"]
+fileDescriptions:
+  test:
+    patterns:
+      - "%{NUMBER:id}"
+    output: "{{ .grok.id }}"
+`
+	writeConfig(t, configContent)
+
+	cfg, err := New("1.0", []string{"-c", "test_config.yaml", "-f", "input.txt"})
+	require.NoError(t, err)
+
+	te, ok := cfg.TextExtractors["text/plain"]
+	assert.True(t, ok)
+	assert.Equal(t, "command", te.Type)
+	assert.Equal(t, []string{"cat", "FILENAME"}, te.Command)
+}
+
+func TestNewWithTextExtractorCommandEmpty(t *testing.T) {
+	testutil.UseTempDir(t)
+	configContent := `
+textExtractor:
+  "text/plain":
+    type: command
+    command: []
+`
+	writeConfig(t, configContent)
+
+	_, err := New("1.0", []string{"-c", "test_config.yaml", "-f", "input.txt"})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "ExtractTextCommand is required")
+	assert.Contains(t, err.Error(), "command is required when type is 'command'")
+}
+
+func TestNewWithMissingTextExtractor(t *testing.T) {
+	testutil.UseTempDir(t)
+	configContent := `
+fileDescriptions:
+  test:
+    patterns:
+      - "%{NUMBER:id}"
+    output: "{{ .grok.id }}"
+`
+	writeConfig(t, configContent)
+
+	_, err := New("1.0", []string{"-c", "test_config.yaml", "-f", "input.txt"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "textExtractor is required in configuration file")
+}
+
+func TestNewWithTextExtractorTypeInvalid(t *testing.T) {
+	testutil.UseTempDir(t)
+	configContent := `
+textExtractor:
+  "text/plain":
+    type: invalid
+`
+	writeConfig(t, configContent)
+
+	_, err := New("1.0", []string{"-c", "test_config.yaml", "-f", "input.txt"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "type must be 'builtin' or 'command'")
+}
+
+func TestNewWithTextExtractorTypeCommandMissingCommand(t *testing.T) {
+	testutil.UseTempDir(t)
+	configContent := `
+textExtractor:
+  "text/plain":
+    type: command
+`
+	writeConfig(t, configContent)
+
+	_, err := New("1.0", []string{"-c", "test_config.yaml", "-f", "input.txt"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "textExtractor.text/plain.command is required when type is 'command'")
+}
+
+func TestNewWithTextExtractorTypeMissing(t *testing.T) {
+	testutil.UseTempDir(t)
+	configContent := `
+textExtractor:
+  "text/plain":
+`
+	writeConfig(t, configContent)
+
+	_, err := New("1.0", []string{"-c", "test_config.yaml", "-f", "input.txt"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "type is required")
 }
 
 func TestNewMissingConfigFile(t *testing.T) {
 	testutil.UseTempDir(t)
-	setArgs(t, "fileganizer", "-c", "nonexistent.yaml", "-f", "input.txt")
 
-	_, err := New("1.0")
+	_, err := New("1.0", []string{"-c", "nonexistent.yaml", "-f", "input.txt"})
 	assert.Error(t, err)
 }
 
 func TestNewWithEnvVars(t *testing.T) {
 	testutil.UseTempDir(t)
 	configContent := `
-ExtractTextCommand: ["cat", "FILENAME"]
+textExtractor:
+  "text/plain":
+    type: builtin
 env:
   - MY_VAR
 fileDescriptions:
@@ -155,10 +314,9 @@ fileDescriptions:
     output: "{{ .grok.id }}"
 `
 	writeConfig(t, configContent)
-	setArgs(t, "fileganizer", "-c", "test_config.yaml", "-f", "input.txt")
 	setEnv(t, "MY_VAR", "myvalue")
 
-	cfg, err := New("1.0")
+	cfg, err := New("1.0", []string{"-c", "test_config.yaml", "-f", "input.txt"})
 	require.NoError(t, err)
 	assert.Equal(t, "myvalue", cfg.EnvVars["MY_VAR"])
 }
@@ -166,7 +324,9 @@ fileDescriptions:
 func TestNewWithMissingEnvVar(t *testing.T) {
 	testutil.UseTempDir(t)
 	configContent := `
-ExtractTextCommand: ["cat", "FILENAME"]
+textExtractor:
+  "text/plain":
+    type: builtin
 env:
   - MISSING_VAR
 fileDescriptions:
@@ -176,9 +336,8 @@ fileDescriptions:
     output: "{{ .grok.id }}"
 `
 	writeConfig(t, configContent)
-	setArgs(t, "fileganizer", "-c", "test_config.yaml", "-f", "input.txt")
 
-	_, err := New("1.0")
+	_, err := New("1.0", []string{"-c", "test_config.yaml", "-f", "input.txt"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "MISSING_VAR")
 }
@@ -186,7 +345,9 @@ fileDescriptions:
 func TestNewWithEnvVarOverrides(t *testing.T) {
 	testutil.UseTempDir(t)
 	configContent := `
-ExtractTextCommand: ["cat", "FILENAME"]
+textExtractor:
+  "text/plain":
+    type: builtin
 commonTemplate: "original"
 fileDescriptions:
   test:
@@ -195,10 +356,9 @@ fileDescriptions:
     output: "{{ .grok.id }}"
 `
 	writeConfig(t, configContent)
-	setArgs(t, "fileganizer", "-c", "test_config.yaml", "-f", "input.txt")
 	setEnv(t, "FILEGANIZER_COMMONTEMPLATE", "overridden")
 
-	cfg, err := New("1.0")
+	cfg, err := New("1.0", []string{"-c", "test_config.yaml", "-f", "input.txt"})
 	require.NoError(t, err)
 	assert.Equal(t, "overridden", cfg.CommonTemplate)
 }
@@ -206,7 +366,9 @@ fileDescriptions:
 func TestNewWithGrokPatternsAndMonths(t *testing.T) {
 	testutil.UseTempDir(t)
 	configContent := `
-ExtractTextCommand: ["cat", "FILENAME"]
+textExtractor:
+  "text/plain":
+    type: builtin
 months:
   MONTHSFRENCH: ["Janvier", "Février", "Mars"]
 grokPatterns:
@@ -219,9 +381,8 @@ fileDescriptions:
     output: "{{ .grok.id }}"
 `
 	writeConfig(t, configContent)
-	setArgs(t, "fileganizer", "-c", "test_config.yaml", "-f", "input.txt")
 
-	cfg, err := New("1.0")
+	cfg, err := New("1.0", []string{"-c", "test_config.yaml", "-f", "input.txt"})
 	require.NoError(t, err)
 
 	assert.Contains(t, cfg.GrokPatterns, "NUMBER")
@@ -233,7 +394,9 @@ fileDescriptions:
 func TestNewWithMonthGrokCollision(t *testing.T) {
 	testutil.UseTempDir(t)
 	configContent := `
-ExtractTextCommand: ["cat", "FILENAME"]
+textExtractor:
+  "text/plain":
+    type: builtin
 months:
   COLLIDE: ["jan"]
 grokPatterns:
@@ -245,9 +408,8 @@ fileDescriptions:
     output: "anything"
 `
 	writeConfig(t, configContent)
-	setArgs(t, "fileganizer", "-c", "test_config.yaml", "-f", "input.txt")
 
-	_, err := New("1.0")
+	_, err := New("1.0", []string{"-c", "test_config.yaml", "-f", "input.txt"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "conflicts with existing grok pattern")
 }
@@ -303,6 +465,25 @@ func TestParseFlags_Help(t *testing.T) {
 func TestParseFlags_InvalidFlag(t *testing.T) {
 	_, err := parseFlags([]string{"fileganizer", "--bogus"})
 	require.Error(t, err)
+}
+
+func TestParseFileDescriptionsDefaultOutput(t *testing.T) {
+	testutil.UseTempDir(t)
+	configContent := `
+textExtractor:
+  "text/plain":
+    type: builtin
+fileDescriptions:
+  nooutput:
+    patterns:
+      - "%{NUMBER:id}"
+`
+	writeConfig(t, configContent)
+
+	cfg, err := New("1.0", []string{"-c", "test_config.yaml", "-f", "input.txt"})
+	require.NoError(t, err)
+	require.Len(t, cfg.FileDescriptions, 1)
+	assert.Equal(t, "{{.Filename}}", cfg.FileDescriptions[0].Output)
 }
 
 func TestLoggerConfigDefaults(t *testing.T) {
@@ -379,4 +560,104 @@ func TestParseGrokPatterns_MonthKeyCollisionReversed(t *testing.T) {
 	err := c.parseGrokPatterns(k)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "conflicts with existing grok pattern")
+}
+
+func TestNewWithCatCommandConfig(t *testing.T) {
+	cfg, err := New("1.0", []string{"-c", "../testdata/config.invoice-cat.yaml", "-f", "input.txt"})
+	require.NoError(t, err)
+
+	assert.Len(t, cfg.TextExtractors, 1)
+	te, ok := cfg.TextExtractors["text/plain"]
+	assert.True(t, ok)
+	assert.Equal(t, "command", te.Type)
+	assert.Equal(t, []string{"cat", "FILENAME"}, te.Command)
+}
+
+type stubConfigProvider struct {
+	err error
+}
+
+func (s stubConfigProvider) ReadBytes() ([]byte, error) {
+	return nil, s.err
+}
+
+func (s stubConfigProvider) Read() (map[string]any, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return map[string]any{"exporter": map[string]any{"port": 9090}}, nil
+}
+
+func TestLoadConfigLayer(t *testing.T) {
+	k := koanf.New(".")
+	loadConfigLayer(k, stubConfigProvider{}, "failed to load stub")
+	assert.Equal(t, 9090, k.Int("exporter.port"))
+
+	k2 := koanf.New(".")
+	loadConfigLayer(k2, stubConfigProvider{err: errors.New("boom")}, "failed to load stub")
+}
+
+func TestNewWithEnvVarOverrideTextExtractorType(t *testing.T) {
+	testutil.UseTempDir(t)
+	configContent := `
+textExtractor:
+  "text/plain":
+    type: command
+    command: ["cat", "FILENAME"]
+fileDescriptions:
+  test:
+    patterns:
+      - "%{NUMBER:id}"
+    output: "{{ .grok.id }}"
+`
+	writeConfig(t, configContent)
+	setEnv(t, "FILEGANIZER_TEXTEXTRACTOR_TEXT_PLAIN_TYPE", "builtin")
+
+	cfg, err := New("1.0", []string{"-c", "test_config.yaml", "-f", "input.txt"})
+	require.NoError(t, err)
+
+	te, ok := cfg.TextExtractors["text/plain"]
+	assert.True(t, ok)
+	assert.Equal(t, "builtin", te.Type)
+	assert.Nil(t, te.Command)
+}
+
+func TestNewWithEnvVarOverrideTextExtractorTypeInvalid(t *testing.T) {
+	testutil.UseTempDir(t)
+	configContent := `
+textExtractor:
+  "text/plain":
+    type: builtin
+fileDescriptions:
+  test:
+    patterns:
+      - "%{NUMBER:id}"
+    output: "{{ .grok.id }}"
+`
+	writeConfig(t, configContent)
+	setEnv(t, "FILEGANIZER_TEXTEXTRACTOR_TEXT_PLAIN_TYPE", "invalid")
+
+	_, err := New("1.0", []string{"-c", "test_config.yaml", "-f", "input.txt"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "type must be 'builtin' or 'command'")
+}
+
+func TestNewWithEnvVarOverrideTextExtractorTypeCommandMissingCommand(t *testing.T) {
+	testutil.UseTempDir(t)
+	configContent := `
+textExtractor:
+  "text/plain":
+    type: builtin
+fileDescriptions:
+  test:
+    patterns:
+      - "%{NUMBER:id}"
+    output: "{{ .grok.id }}"
+`
+	writeConfig(t, configContent)
+	setEnv(t, "FILEGANIZER_TEXTEXTRACTOR_TEXT_PLAIN_TYPE", "command")
+
+	_, err := New("1.0", []string{"-c", "test_config.yaml", "-f", "input.txt"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "textExtractor.text/plain.command is required when type is 'command'")
 }

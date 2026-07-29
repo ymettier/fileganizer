@@ -1,6 +1,8 @@
 ---
-ExtractTextCommand: ["cat", "FILENAME"]
-
+textExtractor:
+  "text/plain":
+    type: command
+    command: ["cat", "FILENAME"]
 months:
   MONTHSENGLISH: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
   MONTHSFRENCH: ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Aout", "Septembre", "Octobre", "Novembre", "Décembre"]
@@ -25,11 +27,11 @@ commonTemplate: |
     Invoice Summary
 
 fileDescriptions:
-  ykjwmwqqjhgh:
+  invoice:
     patterns:
       - "%{JUSTMATCH:matched}Company Foo,"
       - "(?s)Invoice\\n\\nNo %{NUMBER:invoiceNumber}\\n%{MONTHSENGLISH:month} %{MONTHDAY:day}, %{YEAR:year}"
     output : |
-      {{- define "invoiceDate" }}{{ .grok.year }}-{{ MonthIndex .grok.month }}-{{ .grok.day }}{{- end }}
+      {{- define "invoiceDate" }}{{ .Grok.year }}-{{ MonthIndex .Grok.month }}-{{ .Grok.day }}{{- end }}
         date: {{ template "invoiceDate" . }}
-        number: {{ .grok.invoiceNumber }}
+        number: {{ .Grok.invoiceNumber }}

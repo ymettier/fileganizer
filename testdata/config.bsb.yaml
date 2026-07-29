@@ -1,0 +1,54 @@
+---
+textExtractor:
+  "application/pdf":
+    type: builtin
+
+months:
+  MONTHSFRENCHLOWERCASE: ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"]
+
+grokPatterns:
+  MONTHDAY: "(?:0[1-9])|(?:[12][0-9])|(?:3[01])|[1-9]"
+  MONTHNUM2: "0[1-9]|1[0-2]"
+  YEAR: "(?:\\d\\d){1,2}"
+  OWNER001: "Xin Yi Tan"
+  COMPANY001: "Straits Capital"
+  OWNER002: "Robert Wilson"
+  COMPANY002: "Liberty National Bank"
+  OWNER003: "Sanne Mulders"
+  COMPANY003: "Continental Trust"
+  OWNER004: "Mei Ling Tsang"
+  COMPANY004: "Silk Road Banking"
+  OWNER005: "Genevieve Cote"
+  COMPANY005: "Harbour Bank"
+
+fileDescriptions:
+  bsb001:
+    patterns:
+      - "%{OWNER001:owner}"
+      - "%{COMPANY001:company}"
+      - "%{MONTHDAY:day}/%{MONTHNUM2:month}/%{YEAR:year}"
+    output: "{{ .Grok.year }}{{ .Grok.month }}{{ .Grok.day }}__straits_capital__xin_yi_tan\n"
+  bsb002:
+    patterns:
+      - "%{OWNER002:owner}"
+      - "%{COMPANY002:company}"
+      - " - %{MONTHNUM2:month}/%{MONTHDAY:day}/%{YEAR:year}"
+    output: "{{ .Grok.year }}{{ .Grok.month }}{{ .Grok.day }}__liberty_national_bank__robert_wilson\n"
+  bsb003:
+    patterns:
+      - "%{OWNER003:owner}"
+      - "%{COMPANY003:company}"
+      - "Download date:%{YEAR:year}-%{MONTHNUM2:month}-%{MONTHDAY:day}"
+    output: "{{ .Grok.year }}{{ .Grok.month }}{{ .Grok.day }}__continental_trust__sanne_mulders\n"
+  bsb004:
+    patterns:
+      - "%{OWNER004:owner}"
+      - "%{COMPANY004:company}"
+      - "%{MONTHDAY:day}/%{MONTHNUM2:month}/%{YEAR:year}"
+    output: "{{ .Grok.year }}{{ .Grok.month }}{{ .Grok.day }}__silk_road_banking__mei_ling_tsang\n"
+  bsb005:
+    patterns:
+      - "%{OWNER005:owner}"
+      - "%{COMPANY005:company}"
+      - "Fermeture %{MONTHDAY:day} %{MONTHSFRENCHLOWERCASE:month} %{YEAR:year}"
+    output: "{{ .Grok.year }}{{ MonthIndex .Grok.month }}{{ .Grok.day }}__harbour_bank__genevieve_cote\n"

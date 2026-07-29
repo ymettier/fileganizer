@@ -5,9 +5,9 @@
 # All YAML configuration keys can be overridden via FILEGANIZER_* environment
 # variables. The prefix FILEGANIZER_ is stripped, then the name is lowercased
 # and underscores are replaced with dots to match the YAML key path.
-# Examples: FILEGANIZER_LOGGING_LEVEL=debug, FILEGANIZER_EXTRACTTEXTCOMMAND_0=pdftotext
+# Examples: FILEGANIZER_LOGGING_LEVEL=debug, FILEGANIZER_TEXTEXTRACTOR_TYPE=pdf
 
-# Logging configuration (optional). Defaults to INFO level on stdout.
+# Logging configuration (optional). Defaults to INFO level on stderr.
 # Valid filename values: "stdout", "stderr", or a file path (enables rotation).
 # logging:
 #   level: INFO
@@ -18,26 +18,50 @@
 #   compress: true
 #   json: false
 
-# ExtractTextCommand describes the command to extract text from a file (like a pdf file). The special string "FILENAME" will be replaced with the real file name.
+# textExtractor maps MIME types to extraction methods.
+# The file type is detected automatically using MIME (magic bytes).
+# type: "builtin" (internal extractor) or "command" (runs an external command).
+# command: (required when type is "command") the command to run.
+#          The special string "FILENAME" is replaced with the real file name.
+# Available builtins: "application/pdf", "text/plain"
+textExtractor:
+  "application/pdf":
+    type: builtin
+  "text/plain":
+    type: command
+    command: ["cat", "FILENAME"]
 # Examples :
-#   ExtractTextCommand: ["pdftotext", "-nopgbrk", "-enc", "UTF-8", "FILENAME", "-"]
-#   ExtractTextCommand: ["pdf2txt", "FILENAME"]
-ExtractTextCommand: ["pdftotext", "-nopgbrk", "-enc", "UTF-8", "FILENAME", "-"]
+#   Using builtin extractors for PDF and text files:
+#     textExtractor:
+#       "application/pdf":
+#         type: builtin
+#       "text/plain":
+#         type: builtin
+#   Using pdftotext for PDFs:
+#     textExtractor:
+#       "application/pdf":
+#         type: command
+#         command: ["pdftotext", "-nopgbrk", "-enc", "UTF-8", "FILENAME", "-"]
+#   Using cat for text files:
+#     textExtractor:
+#       "text/plain":
+#         type: command
+#         command: ["cat", "FILENAME"]
 
 # These variables will be available as go-template vars for output.
-# Example : {{ .env.DEST }}
-env:
-  - DEST
+# Example : {{ .Env.DEST }}
+# env:
+#   - DEST
 
 # This template will be concatenated to output template.
 # It allows to pre-define templates.
 commonTemplate: ""
 
 # These variables are use to
-# 1. generate grokPatterns. Example :  
+# 1. generate grokPatterns. Example :
 #      MONTHSFRENCHLOWERCASE: "(janvier|février|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|décembre"
 # 2. in a go-template function "MonthIndex" to convert the given string into a string with the number of the month.
-#      Example : "{{ MonthIndex .grok.month }}" will convert to "02" if .grok.month is "février".
+#      Example : "{{ MonthIndex .Grok.month }}" will convert to "02" if .Grok.month is "février".
 months:
   MONTHSFRENCHLOWERCASE: ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "aout", "septembre", "octobre", "novembre", "décembre"]
 
@@ -60,4 +84,4 @@ fileDescriptions:
 # - NowYYYY (returns now with layout YYYY)
 # - NowYYYYMMDD (returns now with layout YYYYMMDD)
 # - NowYYYYMMDD_HHMMSS (returns now with layout YYYYMMDD_HHMMSS)
-    output : "mv {{ .filename }} {{ .env.DEST }}/invoice_{{ .grok.identifiant }}_{{ .grok.numLigne }}_{{ .grok.year }}-{{ MonthIndex .grok.month }}-{{ .grok.day }}.pdf"
+    output : "mv {{ .Filename }} {{ .Env.DEST }}/invoice_{{ .Grok.identifiant }}_{{ .Grok.numLigne }}_{{ .Grok.year }}-{{ MonthIndex .Grok.month }}-{{ .Grok.day }}.pdf"

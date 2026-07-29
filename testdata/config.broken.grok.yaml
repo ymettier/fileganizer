@@ -1,6 +1,7 @@
 ---
-ExtractTextCommand: ["cat", "FILENAME"]
-
+textExtractor:
+  "text/plain":
+    type: builtin
 grokPatterns:
   NUMBER: '[0-9]+'
 
@@ -10,4 +11,4 @@ fileDescriptions:
   broken:
     patterns:
       - "%{NONEXISTENT:field}"
-    output: "{{ .grok.field }}"
+    output: "{{ .Grok.field }}"

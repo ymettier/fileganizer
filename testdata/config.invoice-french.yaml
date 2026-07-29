@@ -1,6 +1,7 @@
 ---
-ExtractTextCommand: ["cat", "FILENAME"]
-
+textExtractor:
+  "text/plain":
+    type: builtin
 months:
   MONTHSFRENCHLOWERCASE: ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"]
 
@@ -15,4 +16,4 @@ fileDescriptions:
   french:
     patterns:
       - "%{MONTHSFRENCHLOWERCASE:month} %{MONTHDAY:day}, %{YEAR:year}"
-    output: "{{ MonthIndex .grok.month }}-{{ .grok.day }}-{{ .grok.year }}"
+    output: "{{ MonthIndex .Grok.month }}-{{ .Grok.day }}-{{ .Grok.year }}"

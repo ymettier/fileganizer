@@ -21,6 +21,8 @@ import (
 	"fileganizer/logger"
 )
 
+var readBuildInfo = debug.ReadBuildInfo
+
 func formatVersion(version string) string {
 	output := fmt.Sprintf("%-15s: %s\n", "Version", version)
 
@@ -30,7 +32,7 @@ func formatVersion(version string) string {
 	revision := "unknown"
 	dirtyBuild := true
 
-	info, ok := debug.ReadBuildInfo()
+	info, ok := readBuildInfo()
 	if !ok {
 		return output
 	}
@@ -42,10 +44,12 @@ func formatVersion(version string) string {
 		switch kv.Key {
 		case "vcs.revision":
 			revision = kv.Value
-		case "vcs.time":
+		case "vcs.time": //nolint:goconst
 			rawLastCommit = kv.Value
 			lastCommit, parseVCSTimeErr = time.Parse(time.RFC3339, kv.Value)
 			if parseVCSTimeErr != nil {
+				// formatVersion runs before the project logger is initialized,
+				// so slog.Default() is the only available logger here.
 				slog.Default().Warn("Failed to parse vcs.time", "value", rawLastCommit, "error", parseVCSTimeErr)
 			}
 		case "vcs.modified":
@@ -116,24 +120,31 @@ type FileDescription struct {
 	Output   string
 }
 
+// TextExtractorConfig defines how text is extracted for a specific MIME type.
+// Supported types: "builtin" (internal extractor), "command" (runs an external command).
+type TextExtractorConfig struct {
+	Type    string
+	Command []string
+}
+
 // Config holds all configuration values for the application, merging CLI flags,
 // YAML config file, and environment variable overrides.
 type Config struct {
-	InputFile          string
-	TextOutput         bool
-	NoDryRun           bool
-	GrokPatterns       map[string]string
-	FileDescriptions   []FileDescription
-	EnvVars            map[string]string
-	CommonTemplate     string
-	Months             map[string][]string
-	ExtractTextCommand []string
+	InputFile        string
+	TextOutput       bool
+	NoDryRun         bool
+	GrokPatterns     map[string]string
+	FileDescriptions []FileDescription
+	EnvVars          map[string]string
+	CommonTemplate   string
+	Months           map[string][]string
+	TextExtractors   map[string]TextExtractorConfig
 }
 
 // New parses CLI flags and the YAML configuration file, returning a fully
 // populated Config. It returns ErrVersionRequested when --version is passed.
-func New(version string) (Config, error) {
-	flags, err := parseFlags(os.Args[1:])
+func New(version string, args []string) (Config, error) {
+	flags, err := parseFlags(args)
 	if err != nil {
 		return Config{}, err
 	}
@@ -193,65 +204,133 @@ func loggerConfig(k *koanf.Koanf) logger.LogOptions {
 	return logOpts
 }
 
-func lookupConfigString(k *koanf.Koanf, camelKey string) (string, bool) {
-	envKey := strings.ToLower(camelKey)
-	if k.Exists(envKey) {
-		return k.String(envKey), true
+// findConfigKey returns the first matching key (lowercase or camelCase) that exists in k.
+func findConfigKey(k *koanf.Koanf, camelKey string) (string, bool) {
+	lowerKey := strings.ToLower(camelKey)
+	if k.Exists(lowerKey) {
+		return lowerKey, true
 	}
 	if k.Exists(camelKey) {
-		return k.String(camelKey), true
+		return camelKey, true
 	}
 	return "", false
 }
 
+func lookupConfigString(k *koanf.Koanf, camelKey string) (string, bool) {
+	key, ok := findConfigKey(k, camelKey)
+	if !ok {
+		return "", false
+	}
+	return k.String(key), true
+}
+
 func lookupConfigStrings(k *koanf.Koanf, camelKey string) ([]string, bool) {
-	envKey := strings.ToLower(camelKey)
-	if k.Exists(envKey) {
-		return k.Strings(envKey), true
+	key, ok := findConfigKey(k, camelKey)
+	if !ok {
+		return nil, false
 	}
-	if k.Exists(camelKey) {
-		return k.Strings(camelKey), true
-	}
-	return nil, false
+	return k.Strings(key), true
 }
 
 func lookupConfigMapKeys(k *koanf.Koanf, camelKey string) []string {
-	envKey := strings.ToLower(camelKey)
-	if k.Exists(envKey) {
-		return k.MapKeys(envKey)
-	}
-	if k.Exists(camelKey) {
-		return k.MapKeys(camelKey)
+	if key, ok := findConfigKey(k, camelKey); ok {
+		return k.MapKeys(key)
 	}
 	return nil
 }
 
-func (c *Config) loadYAML(filename string) (*koanf.Koanf, error) {
+func loadYAML(filename string) (*koanf.Koanf, error) {
 	k := koanf.New(".")
 
 	if err := k.Load(file.Provider(filename), yaml.Parser()); err != nil {
 		return nil, fmt.Errorf("failed to read configuration file %s: %w", filename, err)
 	}
 
+	// Build the key mapper from actual MIME types in the config so that
+	// any MIME type (not just hardcoded ones) is restored correctly.
+	mimeTypes := lookupConfigMapKeys(k, "textExtractor")
+	mapper := fileganizerKeyMapper(mimeTypes)
+
 	// env.Provider produces flat key=value pairs, so no parser is needed (nil is fine).
-	if err := k.Load(env.Provider("FILEGANIZER_", ".", func(s string) string {
-		s = strings.TrimPrefix(s, "FILEGANIZER_")
-		s = strings.ToLower(s)
-		s = strings.ReplaceAll(s, "_", ".")
-		return s
-	}), nil); err != nil {
-		return nil, fmt.Errorf("failed to load environment variables: %w", err)
-	}
+	loadConfigLayer(k, env.Provider("FILEGANIZER_", ".", mapper), "Failed to load environment variable overrides")
 
 	return k, nil
 }
 
-func (c *Config) parseExtractTextCommand(k *koanf.Koanf) error {
-	cmd, ok := lookupConfigStrings(k, "ExtractTextCommand")
-	if !ok || len(cmd) == 0 {
-		return fmt.Errorf("ExtractTextCommand is required (and not empty) in configuration file")
+// loadConfigLayer loads a koanf provider, logging a warning instead of failing
+// when the provider errors, since env overrides are best-effort.
+func loadConfigLayer(k *koanf.Koanf, loader koanf.Provider, msg string) {
+	l := logger.Get()
+	if err := k.Load(loader, nil); err != nil {
+		l.Warn(msg, "err", err)
 	}
-	c.ExtractTextCommand = cmd
+}
+
+// fileganizerKeyMapper returns a mapper function that converts a
+// FILEGANIZER_-prefixed environment variable name to its corresponding koanf
+// config key. It strips the prefix, lowercases, replaces underscores with dots,
+// and restores MIME type slashes from the known types in the config.
+func fileganizerKeyMapper(mimeTypes []string) func(string) string {
+	// Build a lookup: lowercase env form -> koanf key.
+	// e.g. "text/plain" -> envForm "text_plain" -> koanfKey "text/plain"
+	replacements := make(map[string]string, len(mimeTypes))
+	for _, mt := range mimeTypes {
+		envForm := strings.ToLower(strings.ReplaceAll(mt, "/", "_"))
+		replacements[envForm] = mt
+	}
+
+	return func(s string) string {
+		s = strings.TrimPrefix(s, "FILEGANIZER_")
+		s = strings.ToLower(s)
+
+		// Try to find and replace any known MIME type part before
+		// converting remaining underscores to dots.
+		for envForm, koanfKey := range replacements {
+			if idx := strings.Index(s, envForm); idx >= 0 {
+				s = s[:idx] + koanfKey + s[idx+len(envForm):]
+				break
+			}
+		}
+
+		s = strings.ReplaceAll(s, "_", ".")
+		return s
+	}
+}
+
+func (c *Config) parseTextExtractor(k *koanf.Koanf) error {
+	c.TextExtractors = make(map[string]TextExtractorConfig)
+
+	mimeTypes := lookupConfigMapKeys(k, "textExtractor")
+	if len(mimeTypes) == 0 {
+		return fmt.Errorf("textExtractor is required in configuration file")
+	}
+
+	for _, mimeType := range mimeTypes {
+		prefix := "textExtractor." + mimeType + "."
+		te := TextExtractorConfig{}
+
+		if v, ok := lookupConfigString(k, prefix+"type"); ok {
+			te.Type = v
+		}
+
+		switch te.Type {
+		case "builtin":
+			// No additional config needed for builtin extractor
+		case "command":
+			cmd, ok := lookupConfigStrings(k, prefix+"command")
+			if !ok || len(cmd) == 0 {
+				return fmt.Errorf("textExtractor.%s.command is required when type is 'command'", mimeType)
+			}
+			te.Command = cmd
+		case "":
+			return fmt.Errorf("textExtractor.%s.type is required", mimeType)
+		default:
+			return fmt.Errorf("textExtractor.%s.type must be 'builtin' or 'command', got %q", mimeType, te.Type)
+		}
+
+		c.TextExtractors[mimeType] = te
+	}
+
 	return nil
 }
 
@@ -308,19 +387,22 @@ func (c *Config) parseFileDescriptions(k *koanf.Koanf) {
 		if output, ok := lookupConfigString(k, prefix+"output"); ok {
 			d.Output = output
 		}
+		if d.Output == "" {
+			d.Output = "{{.Filename}}"
+		}
 		c.FileDescriptions = append(c.FileDescriptions, d)
 	}
 }
 
 func (c *Config) readConfig(filename string) (logger.LogOptions, error) {
-	k, err := c.loadYAML(filename)
+	k, err := loadYAML(filename)
 	if err != nil {
 		return logger.LogOptions{}, err
 	}
 
 	logOpts := loggerConfig(k)
 
-	if err := c.parseExtractTextCommand(k); err != nil {
+	if err := c.parseTextExtractor(k); err != nil {
 		return logOpts, err
 	}
 	if err := c.parseEnvVars(k); err != nil {
