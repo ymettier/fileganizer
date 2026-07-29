@@ -1,6 +1,7 @@
 ---
-ExtractTextCommand: ["cat", "FILENAME"]
-
+textExtractor:
+  "text/plain":
+    type: builtin
 grokPatterns:
   BROKEN: "["
 

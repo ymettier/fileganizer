@@ -1,0 +1,11 @@
+---
+textExtractor:
+  "text/plain":
+    type: command
+    command: ["cat"]
+
+fileDescriptions:
+  test:
+    patterns:
+      - "NEVERMATCHXX"
+    output: "should not appear\n"

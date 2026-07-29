@@ -1,6 +1,7 @@
 ---
-ExtractTextCommand: ["cat", "FILENAME"]
-
+textExtractor:
+  "text/plain":
+    type: builtin
 months:
   MONTHSENGLISH: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
   MONTHSFRENCH: ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Aout", "Septembre", "Octobre", "Novembre", "Décembre"]
@@ -15,19 +16,21 @@ grokPatterns:
   MONTHNUM2: "0[1-9]|1[0-2]"
   MONTHDAY: "(?:0[1-9])|(?:[12][0-9])|(?:3[01])|[1-9]"
 
+# Common template needs these templates :
+# - newFilePath
+# - newFilename
+# - invoiceDate
+# - invoiceName
+#
 commonTemplate: |
     Invoice Summary
 
 fileDescriptions:
-  matching:
+  invoice:
     patterns:
       - "%{JUSTMATCH:matched}Company Foo,"
       - "(?s)Invoice\\n\\nNo %{NUMBER:invoiceNumber}\\n%{MONTHSENGLISH:month} %{MONTHDAY:day}, %{YEAR:year}"
     output : |
-      {{- define "invoiceDate" }}{{ .grok.year }}-{{ MonthIndex .grok.month }}-{{ .grok.day }}{{- end }}
+      {{- define "invoiceDate" }}{{ .Grok.year }}-{{ MonthIndex .Grok.month }}-{{ .Grok.day }}{{- end }}
         date: {{ template "invoiceDate" . }}
-        number: {{ .grok.invoiceNumber }}
-  brokentpl:
-    patterns:
-      - "%{JUSTMATCH:matched}Company Foo,"
-    output: "{{ .broken"
+        number: {{ .Grok.invoiceNumber }}

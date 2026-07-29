@@ -1,0 +1,10 @@
+---
+textExtractor:
+  "audio/wave":
+    type: builtin
+
+fileDescriptions:
+  test:
+    patterns:
+      - ".*"
+    output: "should not reach here\n"

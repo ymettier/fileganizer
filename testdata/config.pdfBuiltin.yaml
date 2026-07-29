@@ -1,0 +1,13 @@
+---
+textExtractor:
+  "application/pdf":
+    type: builtin
+
+grokPatterns:
+  INVOICENO: '[A-Z0-9-]+'
+
+fileDescriptions:
+  invoice:
+    patterns:
+      - "Invoice No: %{INVOICENO:invoiceNumber}"
+    output: "Invoice {{ .Grok.invoiceNumber }} for {{ .Filename }}\n"

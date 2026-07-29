@@ -1,0 +1,80 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> >>
+endobj
+
+4 0 obj
+<< /Length 690 >>
+stream
+BT
+/F2 24 Tf
+50 750 Td
+(ACME Corp) Tj
+0 -30 Td
+/F1 12 Tf
+(Invoice) Tj
+0 -20 Td
+(Invoice No: INV-2024-001) Tj
+0 -15 Td
+(Date: 2024-03-15) Tj
+0 -30 Td
+( bill to:) Tj
+0 -15 Td
+(John Smith) Tj
+0 -15 Td
+(123 Main Street) Tj
+0 -15 Td
+(Paris, France) Tj
+0 -30 Td
+/F2 14 Tf
+(Description                                    Qty    Price) Tj
+0 -20 Td
+/F1 12 Tf
+(Web Development Services                         1    1500.00) Tj
+0 -15 Td
+(Hosting - Annual                                 1     200.00) Tj
+0 -15 Td
+(SSL Certificate                                  1      50.00) Tj
+0 -25 Td
+/F2 14 Tf
+(Total:                                         EUR  1750.00) Tj
+0 -30 Td
+/F1 10 Tf
+(Payment terms: 30 days) Tj
+0 -15 Td
+(Thank you for your business!) Tj
+ET
+endstream
+endobj
+
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000266 00000 n 
+0000001008 00000 n 
+0000001059 00000 n 
+
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+1115
+%%EOF

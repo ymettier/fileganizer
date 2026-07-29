@@ -1,6 +1,7 @@
 ---
-ExtractTextCommand: ["cat", "FILENAME"]
-
+textExtractor:
+  "text/plain":
+    type: builtin
 months:
   MONTHSENGLISH: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
 
