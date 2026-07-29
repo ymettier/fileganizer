@@ -130,10 +130,10 @@ func processFileDescriptions(ctx context.Context, cfg *config.Config, txt string
 		if r == nil {
 			continue
 		}
-		values := map[string]any{
-			"Env":      cfg.EnvVars,
-			"Grok":     r,
-			"Filename": cfg.InputFile,
+		values := output.TemplateData{
+			Env:      cfg.EnvVars,
+			Grok:     r,
+			Filename: cfg.InputFile,
 		}
 		outputResult, err := o.FromTemplate(fd.Output, values)
 		if err != nil {

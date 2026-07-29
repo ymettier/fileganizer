@@ -13,6 +13,15 @@ import (
 	"fileganizer/logger"
 )
 
+// TemplateData holds the values available to Go templates during rendering.
+// Fields are exported (capitalized) so text/template can access them via
+// reflection. Map keys within Grok and Env remain lowercase.
+type TemplateData struct {
+	Env      map[string]string
+	Grok     map[string]string
+	Filename string
+}
+
 // Output holds template configuration and renders Go templates with parsed data.
 type Output struct {
 	commonTemplate string
@@ -42,8 +51,8 @@ func (o Output) MonthIndex(month string) string {
 }
 
 // FromTemplate renders the output template (prefixed with CommonTemplate if set)
-// using the provided variables and returns the result as a string.
-func (o Output) FromTemplate(tmpl string, vars map[string]any) (string, error) {
+// using the provided TemplateData and returns the result as a string.
+func (o Output) FromTemplate(tmpl string, data TemplateData) (string, error) {
 	l := logger.Get()
 	funcMap := template.FuncMap{
 		"ToUpper":            strings.ToUpper,
@@ -65,7 +74,7 @@ func (o Output) FromTemplate(tmpl string, vars map[string]any) (string, error) {
 	}
 
 	var buf bytes.Buffer
-	if err := parsed.Execute(&buf, vars); err != nil {
+	if err := parsed.Execute(&buf, data); err != nil {
 		l.Error("Failed to execute template", "error", err)
 		return "", err
 	}
