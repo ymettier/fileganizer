@@ -11,8 +11,9 @@ Fileganizer is a Go CLI tool that processes documents through a pipeline: text e
 - **Logging**: `log/slog` (stdlib, text handler, defaults to stderr)
 - **Log rotation**: `gopkg.in/natefinch/lumberjack.v2`
 - **Templates**: `text/template` (stdlib)
+- **PDF extraction**: `github.com/pdfcpu/pdfcpu`
 - **Testing**: `testing` + `github.com/stretchr/testify/assert`
-- **Build**: GoReleaser, CGO_ENABLED=0, Linux only (amd64/arm64)
+- **Build**: GoReleaser (`.goreleaser.yaml`), CGO_ENABLED=0, Linux only (amd64/arm64)
 - Avoid `github.com/sirupsen/logrus` (blocked by depguard linter)
 
 ## Project Structure
@@ -32,21 +33,29 @@ Fileganizer is a Go CLI tool that processes documents through a pipeline: text e
 ├── logger/
 │   ├── logger.go          # Structured logging (slog singleton)
 │   └── logger_test.go
+├── pdftotext/
+│   ├── pdftotext.go       # Builtin PDF text extraction (pdfcpu)
+│   ├── pdftotext_test.go
+│   └── testdata/          # PDF test fixtures (forged + bank statements)
 ├── textextract/
 │   ├── textextract.go     # External command text extraction
 │   └── textextract_test.go
 ├── testutil/
 │   ├── testutil.go        # Test helpers (temp dir, etc.)
 │   └── testutil_test.go
-├── testdata/              # Test fixtures (PDF, text, config YAMLs)
+├── testdata/              # Config YAMLs, text fixtures, minimal.wav
 ├── config.yaml.sample     # Example configuration
+├── go.mod                 # Go module definition
+├── go.sum                 # Go module checksums
+├── LICENSE                # License (also mandatory in testdata subdirectories)
+├── README.md
 └── version.txt            # Embedded at build time (//go:embed)
 ```
 
 ## Development Guidelines
 
 ### Code Style
-- Use structured logging (slog) instead of fmt.Printf for application output
+- Use structured logging (slog) instead of fmt.Printf for application output. The exception is `main()` in `main.go` which may use `fmt.Print`/`fmt.Printf`/`fmt.Fprintf` directly for CLI output (result to stdout, version to stdout, error message to stderr). Never use it in any other function.
 - All public functions should have documentation comments
 - Keep functions focused and under 50 lines when possible
 - Use meaningful variable names
@@ -72,6 +81,7 @@ Fileganizer is a Go CLI tool that processes documents through a pipeline: text e
 - Constructors: `New()` returns a value (not pointer) for small structs.
 - Logger: singleton via `logger.Get()`.
 - Context: pass `context.Context` to operations that may need cancellation.
+- Grok patterns are compiled fresh on every `Parse()` call. Each pattern is only used a few times (once per file per fileDescription), so caching adds complexity for no measurable gain.
 
 ### Configuration Management
 - Use Koanf for all YAML parsing
@@ -108,8 +118,15 @@ Fileganizer is a Go CLI tool that processes documents through a pipeline: text e
 - Use testify assertions (`assert.Equal`, `assert.Nil`, `assert.FileExists`)
 - Tests should be isolated and use temporary files/directories
 - Always clean up test artifacts with defer
-- Test data files must be placed in the `testdata/` directory
+- Test data files go in the package-local `testdata/` directory (e.g., `pdftotext/testdata/` for PDFs, root `testdata/` for config YAMLs)
+- A `LICENSE` file (MIT) is mandatory in `testdata/` directories containing files from external sources — it is not test data and is excluded from the unused file check
+- Config files in `testdata/` testing invalid/broken patterns must be named `config.broken.<what>.yaml` (e.g., `config.broken.grok.yaml`, `config.broken.template.yaml`)
+- `config.broken.mime.yaml` tests the "no extractor for MIME type" error path — `audio/wave` is deliberately unsupported and will never have a builtin extractor added
 - Unused testdata files must be removed
+- **Coverage requirements**:
+  - All packages: 100% statement coverage
+  - Exception: `testutil/` minimum 70% (error branches for unreachable system calls)
+  - Exception: `main` (root package) minimum 90% (end-to-end tests)
 
 ## Common Tasks
 
