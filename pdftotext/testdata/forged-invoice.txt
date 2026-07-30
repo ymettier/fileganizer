@@ -1,0 +1,15 @@
+ACME Corp
+Invoice
+Invoice No: INV-2024-001
+Date: 2024-03-15
+ bill to:
+John Smith
+123 Main Street
+Paris, France
+Description                                    Qty    Price
+Web Development Services                         1    1500.00
+Hosting - Annual                                 1     200.00
+SSL Certificate                                  1      50.00
+Total:                                         EUR  1750.00
+Payment terms: 30 days
+Thank you for your business!
