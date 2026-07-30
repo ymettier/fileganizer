@@ -5,3 +5,6 @@ Test data licenses:
 - forged-invoice.pdf: MIT (Fileganizer project, created for testing)
 - bsb-*-statement.pdf: MIT (https://github.com/bankstatemently/bank-statement-parsing-benchmark)
 - control-char.pdf: MIT (Fileganizer project, created for testing)
+- per-char-test.pdf: MIT (Fileganizer project, created for testing)
+- pdflatex-per-char-text.pdf: CC-BY-SA-4.0 (https://github.com/py-pdf/sample-files)
+  See LICENSE-py-pdf for full license text.
