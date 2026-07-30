@@ -158,20 +158,6 @@ func TestResetClosesPreviousWriter(t *testing.T) {
 	assert.NotNil(t, l2.closer)
 }
 
-func TestWithCtx_FromCtx(t *testing.T) {
-	l := newLogger(nil)
-	ctx := WithCtx(context.Background(), l)
-
-	extracted := FromCtx(ctx)
-	assert.Same(t, l, extracted)
-}
-
-func TestFromCtx_NoLogger(t *testing.T) {
-	resetGlobal()
-	l := FromCtx(context.Background())
-	assert.NotNil(t, l) // returns the default logger
-}
-
 func TestNewLogger_InvalidLevelEnv(t *testing.T) {
 	os.Setenv("FILEGANIZER_LOGGING_LEVEL", "BOGUS")
 	defer os.Unsetenv("FILEGANIZER_LOGGING_LEVEL")

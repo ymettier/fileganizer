@@ -15,11 +15,15 @@ import (
 	"fileganizer/testutil"
 )
 
-func TestFileInvoice(t *testing.T) {
+func withArgs(t *testing.T, args ...string) {
+	t.Helper()
 	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }() // os.Args is a "global variable", so keep the state from before the test, and restore it after.
+	os.Args = append([]string{"./fileganizer"}, args...)
+	t.Cleanup(func() { os.Args = oldArgs })
+}
 
-	os.Args = []string{"./fileganizer", "-c", "testdata/config.invoice.yaml", "-f", "testdata/invoice.txt"} //nolint:goconst
+func TestFileInvoice(t *testing.T) {
+	withArgs(t, "-c", "testdata/config.invoice.yaml", "-f", "testdata/invoice.txt")
 
 	output, err := run()
 	assert.Nil(t, err)
@@ -27,12 +31,9 @@ func TestFileInvoice(t *testing.T) {
 }
 
 func TestFileInvoiceEnv(t *testing.T) {
-	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }()
-
 	os.Setenv("SOMEVAR", "magic")
 	defer os.Unsetenv("SOMEVAR")
-	os.Args = []string{"./fileganizer", "-c", "testdata/config.invoice-env.yaml", "-f", "testdata/invoice.txt"}
+	withArgs(t, "-c", "testdata/config.invoice-env.yaml", "-f", "testdata/invoice.txt")
 
 	output, err := run()
 	assert.Nil(t, err)
@@ -40,10 +41,7 @@ func TestFileInvoiceEnv(t *testing.T) {
 }
 
 func TestBuiltinExtractUnsupportedMIME(t *testing.T) {
-	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }()
-
-	os.Args = []string{"./fileganizer", "-c", "testdata/config.broken.mime.yaml", "-f", "testdata/minimal.wav"}
+	withArgs(t, "-c", "testdata/config.broken.mime.yaml", "-f", "testdata/minimal.wav")
 
 	_, err := run()
 	assert.Error(t, err)
@@ -62,10 +60,7 @@ func TestDetectFileType_ReadError(t *testing.T) {
 }
 
 func TestPDFBuiltinExtractor(t *testing.T) {
-	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }()
-
-	os.Args = []string{"./fileganizer", "-c", "testdata/config.pdfBuiltin.yaml", "-f", "pdftotext/testdata/forged-invoice.pdf"}
+	withArgs(t, "-c", "testdata/config.pdfBuiltin.yaml", "-f", "pdftotext/testdata/forged-invoice.pdf")
 
 	output, err := run()
 	assert.Nil(t, err)
@@ -73,12 +68,9 @@ func TestPDFBuiltinExtractor(t *testing.T) {
 }
 
 func TestPDFBuiltinExtractorEnv(t *testing.T) {
-	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }()
-
 	os.Setenv("COMPANY", "ACME Corp")
 	defer os.Unsetenv("COMPANY")
-	os.Args = []string{"./fileganizer", "-c", "testdata/config.pdfBuiltinEnv.yaml", "-f", "pdftotext/testdata/forged-invoice.pdf"}
+	withArgs(t, "-c", "testdata/config.pdfBuiltinEnv.yaml", "-f", "pdftotext/testdata/forged-invoice.pdf")
 
 	output, err := run()
 	assert.Nil(t, err)
@@ -86,10 +78,7 @@ func TestPDFBuiltinExtractorEnv(t *testing.T) {
 }
 
 func TestFileNonMatchingPattern(t *testing.T) {
-	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }()
-
-	os.Args = []string{"./fileganizer", "-c", "testdata/config.invoice-nomatch.yaml", "-f", "testdata/invoice.txt"}
+	withArgs(t, "-c", "testdata/config.invoice-nomatch.yaml", "-f", "testdata/invoice.txt")
 
 	output, err := run()
 	assert.Nil(t, err)
@@ -98,10 +87,7 @@ func TestFileNonMatchingPattern(t *testing.T) {
 }
 
 func TestFileBrokenTemplate(t *testing.T) {
-	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }()
-
-	os.Args = []string{"./fileganizer", "-c", "testdata/config.broken.template.yaml", "-f", "testdata/invoice.txt"}
+	withArgs(t, "-c", "testdata/config.broken.template.yaml", "-f", "testdata/invoice.txt")
 
 	output, err := run()
 	assert.Nil(t, err)
@@ -109,10 +95,7 @@ func TestFileBrokenTemplate(t *testing.T) {
 }
 
 func TestFileRunMode(t *testing.T) {
-	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }()
-
-	os.Args = []string{"./fileganizer", "-c", "testdata/config.invoice-run.yaml", "-f", "testdata/invoice.txt", "-r"}
+	withArgs(t, "-c", "testdata/config.invoice-run.yaml", "-f", "testdata/invoice.txt", "-r")
 
 	output, err := run()
 	assert.Nil(t, err)
@@ -120,10 +103,7 @@ func TestFileRunMode(t *testing.T) {
 }
 
 func TestFileFrenchMonths(t *testing.T) {
-	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }()
-
-	os.Args = []string{"./fileganizer", "-c", "testdata/config.invoice-french.yaml", "-f", "testdata/invoice-french.txt"}
+	withArgs(t, "-c", "testdata/config.invoice-french.yaml", "-f", "testdata/invoice-french.txt")
 
 	output, err := run()
 	assert.Nil(t, err)
@@ -131,10 +111,7 @@ func TestFileFrenchMonths(t *testing.T) {
 }
 
 func TestRunMissingConfigFile(t *testing.T) {
-	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }()
-
-	os.Args = []string{"./fileganizer", "-c", "testdata/nonexistent.yaml", "-f", "testdata/invoice.txt"}
+	withArgs(t, "-c", "testdata/nonexistent.yaml", "-f", "testdata/invoice.txt")
 
 	_, err := run()
 	assert.Error(t, err)
@@ -142,20 +119,14 @@ func TestRunMissingConfigFile(t *testing.T) {
 }
 
 func TestRunMissingInputFile(t *testing.T) {
-	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }()
-
-	os.Args = []string{"./fileganizer", "-c", "testdata/config.invoice.yaml", "-f", "testdata/nonexistent.txt"}
+	withArgs(t, "-c", "testdata/config.invoice.yaml", "-f", "testdata/nonexistent.txt")
 
 	_, err := run()
 	assert.Error(t, err)
 }
 
 func TestRunTextOutputFlag(t *testing.T) {
-	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }()
-
-	os.Args = []string{"./fileganizer", "-c", "testdata/config.invoice.yaml", "-f", "testdata/invoice.txt", "-t"}
+	withArgs(t, "-c", "testdata/config.invoice.yaml", "-f", "testdata/invoice.txt", "-t")
 
 	output, err := run()
 	assert.NoError(t, err)
@@ -163,40 +134,28 @@ func TestRunTextOutputFlag(t *testing.T) {
 }
 
 func TestRunBrokenGrokPattern(t *testing.T) {
-	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }()
-
-	os.Args = []string{"./fileganizer", "-c", "testdata/config.broken.grok.yaml", "-f", "testdata/invoice.txt"}
+	withArgs(t, "-c", "testdata/config.broken.grok.yaml", "-f", "testdata/invoice.txt")
 
 	_, err := run()
 	assert.Error(t, err)
 }
 
 func TestFileRunModeFails(t *testing.T) {
-	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }()
-
-	os.Args = []string{"./fileganizer", "-c", "testdata/config.broken.run.yaml", "-f", "testdata/invoice.txt", "-r"}
+	withArgs(t, "-c", "testdata/config.broken.run.yaml", "-f", "testdata/invoice.txt", "-r")
 
 	_, err := run()
 	assert.Error(t, err)
 }
 
 func TestRunBrokenGrokPatternDefinition(t *testing.T) {
-	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }()
-
-	os.Args = []string{"./fileganizer", "-c", "testdata/config.broken.regex.yaml", "-f", "testdata/invoice.txt"}
+	withArgs(t, "-c", "testdata/config.broken.regex.yaml", "-f", "testdata/invoice.txt")
 
 	_, err := run()
 	assert.Error(t, err)
 }
 
 func TestRunVersionFlag(t *testing.T) {
-	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }()
-
-	os.Args = []string{"./fileganizer", "-V"}
+	withArgs(t, "-V")
 
 	_, err := run()
 	assert.NoError(t, err)
@@ -217,10 +176,7 @@ func TestBSBStatements(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			oldArgs := os.Args
-			defer func() { os.Args = oldArgs }()
-
-			os.Args = []string{"./fileganizer", "-c", "testdata/config.bsb.yaml", "-f", tc.pdf}
+			withArgs(t, "-c", "testdata/config.bsb.yaml", "-f", tc.pdf)
 
 			output, err := run()
 			assert.Nil(t, err)
@@ -230,10 +186,7 @@ func TestBSBStatements(t *testing.T) {
 }
 
 func TestExtractTextMimeNotInConfig(t *testing.T) {
-	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }()
-
-	os.Args = []string{"./fileganizer", "-c", "testdata/config.broken.mime.yaml", "-f", "testdata/invoice.txt"}
+	withArgs(t, "-c", "testdata/config.broken.mime.yaml", "-f", "testdata/invoice.txt")
 
 	_, err := run()
 	assert.Error(t, err)
@@ -241,10 +194,7 @@ func TestExtractTextMimeNotInConfig(t *testing.T) {
 }
 
 func TestProcessFileDescriptionsNoMatch(t *testing.T) {
-	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }()
-
-	os.Args = []string{"./fileganizer", "-c", "testdata/config.nomatch.yaml", "-f", "testdata/invoice.txt"}
+	withArgs(t, "-c", "testdata/config.nomatch.yaml", "-f", "testdata/invoice.txt")
 
 	output, err := run()
 	assert.Nil(t, err)
@@ -264,11 +214,7 @@ func TestExtractTextUnsupportedType(t *testing.T) {
 }
 
 func TestFileInvoiceWithCatCommand(t *testing.T) {
-	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }()
-
-	configFile := "testdata/config.invoice-cat.yaml"
-	os.Args = []string{"./fileganizer", "-c", configFile, "-f", "testdata/invoice.txt"}
+	withArgs(t, "-c", "testdata/config.invoice-cat.yaml", "-f", "testdata/invoice.txt")
 
 	output, err := run()
 	assert.Nil(t, err)
