@@ -7,3 +7,7 @@ dist/
 version.txt
 coverage*.out
 coverage.html
+cover.out
+cover*.out
+private_pdf_examples
+testdata/test-config.yaml
