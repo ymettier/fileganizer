@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"sort"
 	"strconv"
@@ -21,7 +22,6 @@ import (
 	"fileganizer/logger"
 )
 
-// pdfToken kind constants.
 const (
 	tokName = 'n'
 	tokStr  = 's'
@@ -29,29 +29,16 @@ const (
 	tokArr  = 'a'
 	tokKw   = 'k'
 	tokNum  = 'N'
+
+	maxByte  = 255
+	spaceCID = 32
+
+	emScale       = 1000.0
+	wordGapRatio  = 0.09
+	lineGroupTol  = 2.0
+	maxYDistLines = 4.0
 )
 
-// maxByte is the maximum value an uint8 can hold, used for bounds checking
-// when converting parsed octal escape values from PDF literal strings.
-const maxByte = 255
-
-// spaceChar is the character code for the space glyph in simple fonts.
-const spaceChar = 32
-
-// Text extraction constants for adaptive word gap detection.
-const (
-	maxCharAdvances   = 50  // maximum recent advances to track
-	lowerFallback     = 40  // fallback threshold for first few advances on a line
-	minThreshold      = 30  // minimum word gap threshold
-	fallbackThreshold = 100 // fallback for lines with too few advances
-
-	emScale     = 1000.0 // font units per em
-	spaceRatio  = 0.3    // word gap threshold as fraction of space width
-	fontSizeDef = 0.04   // fallback word gap threshold as fraction of font size
-)
-
-// fontWidths holds glyph widths for a simple font (Type1/TrueType).
-// Indexed by character code from 0-255.
 type fontWidths [256]uint16
 
 type pdfToken struct {
@@ -59,7 +46,11 @@ type pdfToken struct {
 	raw  string
 }
 
-// contentScanner tokenizes a PDF content stream.
+type positionedChar struct {
+	x0, y0, x1, y1 float64
+	text           string
+}
+
 type contentScanner struct {
 	data []byte
 	pos  int
@@ -204,7 +195,6 @@ func (s *contentScanner) readKeyword() (pdfToken, bool) {
 	return pdfToken{kind: tokKw, raw: string(s.data[start:s.pos])}, true
 }
 
-// parseLiteralString unescapes a PDF literal string.
 func parseLiteralString(s string) string {
 	if len(s) < 2 {
 		return s
@@ -221,8 +211,6 @@ func parseLiteralString(s string) string {
 	return b.String()
 }
 
-// writeEscaped handles a backslash escape sequence at position i in s,
-// writing the decoded byte to b. It returns the updated index.
 func writeEscaped(b *strings.Builder, s string, i int) int {
 	i++
 	switch s[i] {
@@ -254,7 +242,6 @@ func writeEscaped(b *strings.Builder, s string, i int) int {
 	return i
 }
 
-// parseHexString decodes a PDF hex string.
 func parseHexString(s string) []byte {
 	if len(s) < 2 {
 		return nil
@@ -271,7 +258,6 @@ func parseHexString(s string) []byte {
 	return dst[:n]
 }
 
-// toUnicodeMap parses a ToUnicode CMap and returns a CID->rune mapping.
 func toUnicodeMap(data []byte) map[uint16]rune {
 	m := make(map[uint16]rune)
 	s := &contentScanner{data: data}
@@ -395,12 +381,10 @@ func addBFRangeList(s *contentScanner, m map[uint16]rune, startCID []byte) {
 	}
 }
 
-// cidToUint16 converts a 2-byte CID to uint16.
 func cidToUint16(b []byte) uint16 {
 	return uint16(b[0])<<8 | uint16(b[1])
 }
 
-// decodeText decodes CID bytes using a CID→rune map.
 func decodeText(data []byte, cmap map[uint16]rune) string {
 	var b strings.Builder
 	for i := 0; i < len(data); {
@@ -419,80 +403,193 @@ func decodeText(data []byte, cmap map[uint16]rune) string {
 				continue
 			}
 		}
-		b.WriteByte(data[i])
+		b.WriteRune(rune(data[i]))
 		i++
 	}
 	return b.String()
 }
 
-// textFromContentStream parses a PDF content stream and extracts text strings
-// using the provided font ToUnicode maps (fontResourceName -> CID→rune).
+// multMatrices multiplies two 6-element PDF transformation matrices: a × b.
+func multMatrices(a, b [6]float64) [6]float64 {
+	return [6]float64{
+		a[0]*b[0] + a[1]*b[2],
+		a[0]*b[1] + a[1]*b[3],
+		a[2]*b[0] + a[3]*b[2],
+		a[2]*b[1] + a[3]*b[3],
+		a[4]*b[0] + a[5]*b[2] + b[4],
+		a[4]*b[1] + a[5]*b[3] + b[5],
+	}
+}
+
+// applyTd translates the text matrix: Tm' = [1 0 0 1 tx ty] × Tm.
+func applyTd(tm [6]float64, tx, ty float64) [6]float64 {
+	return [6]float64{
+		tm[0], tm[1], tm[2], tm[3],
+		tx*tm[0] + ty*tm[2] + tm[4],
+		tx*tm[1] + ty*tm[3] + tm[5],
+	}
+}
+
+// textRenderPos returns the page-space position (from CTM × Tm).
+func textRenderPos(ctm, tm [6]float64) (x, y float64) {
+	m := multMatrices(ctm, tm)
+	return m[4], m[5]
+}
+
+// charWidth returns the width of a glyph CID in text space units.
+func charWidth(fw *fontWidths, cid byte, fontSize float64) float64 {
+	if fw != nil && int(cid) < len(fw) && fw[cid] > 0 {
+		return float64(fw[cid]) / emScale * fontSize
+	}
+	return fontSize * 0.5 //nolint:mnd
+}
+
+// groupCharsIntoLines groups positioned characters into lines by Y proximity.
+func groupCharsIntoLines(chars []positionedChar, lineTol float64) [][]positionedChar {
+	if len(chars) == 0 {
+		return nil
+	}
+
+	sorted := make([]positionedChar, len(chars))
+	copy(sorted, chars)
+	sort.Slice(sorted, func(i, j int) bool {
+		if math.Abs(sorted[i].y0-sorted[j].y0) > lineTol {
+			return sorted[i].y0 > sorted[j].y0
+		}
+		return sorted[i].x0 < sorted[j].x0
+	})
+
+	var lines [][]positionedChar
+	var cur []positionedChar
+	curY := sorted[0].y0
+
+	for _, c := range sorted {
+		if math.Abs(c.y0-curY) > lineTol {
+			lines = append(lines, cur)
+			cur = nil
+			curY = c.y0
+		}
+		cur = append(cur, c)
+	}
+	if len(cur) > 0 {
+		lines = append(lines, cur)
+	}
+
+	return lines
+}
+
+func renderLines(lines [][]positionedChar, wordRatio float64) string {
+	var out strings.Builder
+	for li, line := range lines {
+		if li > 0 {
+			out.WriteByte('\n')
+		}
+		sort.Slice(line, func(i, j int) bool {
+			return line[i].x0 < line[j].x0
+		})
+		for ci, c := range line {
+			if ci > 0 {
+				gap := c.x0 - line[ci-1].x1
+				charSize := c.y0 - c.y1
+				if charSize < 0 {
+					charSize = -charSize
+				}
+				if gap > charSize*wordRatio {
+					out.WriteByte(' ')
+				}
+			}
+			out.WriteString(c.text)
+		}
+	}
+	return out.String()
+}
+
+// textFromContentStream parses a PDF content stream and extracts text with
+// position tracking, then groups characters into lines geometrically.
 func textFromContentStream( //nolint:gocyclo,funlen
 	content []byte, fontCMaps map[string]map[uint16]rune, fWidths map[string]*fontWidths,
 ) string {
 	s := &contentScanner{data: content}
 	var stack []pdfToken
 	var currentFont string
-	var out strings.Builder
+	var fontSize float64
 
-	// Text state for position tracking
-	var (
-		textX        float64 = 0
-		textY        float64 = 0
-		lastTextX    float64 = -1
-		lastTextY    float64 = -1
-		fontSize     float64
-		pendingText  string
-		lastCharCode byte      // last character code flushed (for font metric word gap detection)
-		charAdvances []float64 // recent character advances for adaptive word gap detection
-	)
+	ctm := [6]float64{1, 0, 0, 1, 0, 0}
+	var ctmStack [][6]float64
+	tm := [6]float64{1, 0, 0, 1, 0, 0}
+	var textLeading float64
+	var cursorX float64
 
-	flushPending := func() {
-		if pendingText == "" {
-			return
+	var chars []positionedChar
+
+	pushChar := func(text string, curX float64) {
+		px, py := textRenderPos(ctm, tm)
+		x0 := px + math.Min(cursorX, curX)
+		x1 := px + math.Max(cursorX, curX)
+		if x1-x0 < 0.1 { //nolint:mnd
+			x1 = x0 + fontSize
 		}
+		chars = append(chars, positionedChar{
+			x0:   x0,
+			y0:   py,
+			x1:   x1,
+			y1:   py - fontSize,
+			text: text,
+		})
+	}
 
-		wordGap := false
+	decodeAndRender := func(data []byte, cmap map[uint16]rune) {
+		fw := fWidths[currentFont]
+		for i := 0; i < len(data); {
+			var cid byte
+			var r rune
+			var advance float64
 
-		// Font metric word gap detection: subtract previous glyph width from Td advance
-		// to compute extra spacing. The advance (textX - lastTextX) is the Td value
-		// from the previous character end to the current character start. Subtracting
-		// the previous glyph width gives the extra white space between characters.
-		if fw, ok := fWidths[currentFont]; ok && fontSize > 0 && lastTextX >= 0 && textY == lastTextY {
-			if int(lastCharCode) < len(fw) && fw[lastCharCode] > 0 {
-				charWidth := float64(fw[lastCharCode]) / emScale * fontSize
-				advance := textX - lastTextX
-				extra := advance - charWidth
-				// Compute threshold: 30% of space character width or 4% of font size
-				threshold := fontSize * fontSizeDef
-				if spaceChar < len(fw) && fw[spaceChar] > 0 {
-					spaceWidth := float64(fw[spaceChar]) / emScale * fontSize
-					if spaceWidth*spaceRatio > threshold {
-						threshold = spaceWidth * spaceRatio
-					}
+			if cmap != nil && i+1 < len(data) {
+				cidPair := uint16(data[i])<<8 | uint16(data[i+1])
+				if r2, ok := cmap[cidPair]; ok {
+					r = r2
+					cid = data[i]
+					advance = charWidth(fw, cid, fontSize)
+					pushChar(string(r), cursorX+advance)
+					cursorX += advance
+					i += 2
+					continue
 				}
-				if extra > threshold {
-					wordGap = true
+			}
+			cid = data[i]
+			advance = charWidth(fw, cid, fontSize)
+			if cmap != nil {
+				if r2, ok := cmap[uint16(cid)]; ok {
+					r = r2
+				} else {
+					r = rune(cid)
+				}
+			} else {
+				r = rune(cid)
+			}
+			pushChar(string(r), cursorX+advance)
+			cursorX += advance
+			i++
+		}
+	}
+
+	renderTJArray := func(seq []pdfToken) {
+		cmap := fontCMaps[currentFont]
+		for _, el := range seq {
+			switch el.kind {
+			case tokStr:
+				data := []byte(parseLiteralString(el.raw))
+				decodeAndRender(data, cmap)
+			case tokHex:
+				data := parseHexString(el.raw)
+				decodeAndRender(data, cmap)
+			case tokNum:
+				if val, err := strconv.ParseFloat(el.raw, 64); err == nil {
+					cursorX -= val * 0.001 * fontSize
 				}
 			}
 		}
-
-		// Fallback: threshold-based word gap detection when font metrics unavailable
-		if !wordGap && lastTextX >= 0 && textY == lastTextY && len(charAdvances) >= 3 {
-			advance := textX - lastTextX
-			if advance > getWordGapThreshold(charAdvances) {
-				wordGap = true
-			}
-		}
-
-		if wordGap {
-			out.WriteByte(' ')
-		}
-		out.WriteString(pendingText)
-		lastCharCode = pendingText[len(pendingText)-1]
-		lastTextX = textX
-		lastTextY = textY
-		pendingText = ""
 	}
 
 	for {
@@ -502,13 +599,55 @@ func textFromContentStream( //nolint:gocyclo,funlen
 		}
 
 		if tok.kind == tokArr && tok.raw == "[" {
-			flushPending()
-			out.WriteString(collectTextFromArray(s, fontCMaps, currentFont))
+			var seq []pdfToken
+			for {
+				el, ok := s.next()
+				if !ok || (el.kind == tokArr && el.raw == "]") {
+					break
+				}
+				seq = append(seq, el)
+			}
+			renderTJArray(seq)
 			continue
 		}
 
 		if tok.kind == tokKw {
 			switch tok.raw {
+			case "q":
+				var cpy [6]float64
+				copy(cpy[:], ctm[:])
+				ctmStack = append(ctmStack, cpy)
+
+			case "Q":
+				if len(ctmStack) > 0 {
+					ctm = ctmStack[len(ctmStack)-1]
+					ctmStack = ctmStack[:len(ctmStack)-1]
+				}
+
+			case "cm":
+				if len(stack) >= 6 { //nolint:mnd
+					f := stack[len(stack)-1]
+					e := stack[len(stack)-2]
+					d := stack[len(stack)-3]
+					c := stack[len(stack)-4]
+					b := stack[len(stack)-5]
+					a := stack[len(stack)-6]
+					if a.kind == tokNum && b.kind == tokNum && c.kind == tokNum &&
+						d.kind == tokNum && e.kind == tokNum && f.kind == tokNum {
+						av, _ := strconv.ParseFloat(a.raw, 64)
+						bv, _ := strconv.ParseFloat(b.raw, 64)
+						cv, _ := strconv.ParseFloat(c.raw, 64)
+						dv, _ := strconv.ParseFloat(d.raw, 64)
+						ev, _ := strconv.ParseFloat(e.raw, 64)
+						fv, _ := strconv.ParseFloat(f.raw, 64)
+						ctm = multMatrices([6]float64{av, bv, cv, dv, ev, fv}, ctm)
+					}
+				}
+
+			case "BT":
+				tm = [6]float64{1, 0, 0, 1, 0, 0}
+				cursorX = 0
+
 			case "Tf":
 				if len(stack) >= 2 && stack[len(stack)-2].kind == tokName {
 					currentFont = strings.TrimPrefix(stack[len(stack)-2].raw, "/")
@@ -520,60 +659,125 @@ func textFromContentStream( //nolint:gocyclo,funlen
 					}
 				}
 
-			case "Tw":
-				// Word spacing - not used in position tracking for word gap detection
-				// but we parse to keep stack in sync
-				if len(stack) >= 1 && stack[len(stack)-1].kind == tokNum {
-					_, _ = strconv.ParseFloat(stack[len(stack)-1].raw, 64)
-				}
-
 			case "Td", "TD":
-				flushPending()
 				if len(stack) >= 2 {
 					ty := stack[len(stack)-1]
 					tx := stack[len(stack)-2]
 					if tx.kind == tokNum && ty.kind == tokNum {
-						txVal, txErr := strconv.ParseFloat(tx.raw, 64)
-						tyVal, tyErr := strconv.ParseFloat(ty.raw, 64)
-						if txErr == nil {
-							// Track character advance for word gap detection
-							// Track on same line; reset tracking on line break (ty != 0)
-							if tyErr == nil && tyVal == 0 && txVal > 0 {
-								// Same line, positive advance
-								if lastTextX >= 0 && textY == lastTextY {
-									charAdvances = append(charAdvances, txVal)
-								} else if lastTextX < 0 {
-									// First text on page/line
-									charAdvances = append(charAdvances, txVal)
-								}
-								if len(charAdvances) > maxCharAdvances {
-									charAdvances = charAdvances[len(charAdvances)-maxCharAdvances:]
-								}
-							}
-							textX += txVal
-						}
-						if tyErr == nil {
-							if tyVal != 0 {
-								textY += tyVal
-								// Line break: reset lastTextX for new line
-								lastTextX = -1
-								out.WriteByte('\n')
-							}
-						}
+						txVal, _ := strconv.ParseFloat(tx.raw, 64)
+						tyVal, _ := strconv.ParseFloat(ty.raw, 64)
+						tm = applyTd(tm, txVal, tyVal)
+						cursorX = 0
+					}
+				}
+				if tok.raw == "TD" && len(stack) >= 1 {
+					ty := stack[len(stack)-1]
+					if ty.kind == tokNum {
+						tyVal, _ := strconv.ParseFloat(ty.raw, 64)
+						textLeading = -tyVal
 					}
 				}
 
-			case "Tj", "'", "\"":
-				txt := writeTextFromStack(stack, fontCMaps, currentFont)
-				if txt != "" {
-					pendingText += txt
-					// Don't estimate advance here - Td tells us actual position
+			case "Tm":
+				if len(stack) >= 6 { //nolint:mnd
+					f := stack[len(stack)-1]
+					e := stack[len(stack)-2]
+					d := stack[len(stack)-3]
+					c := stack[len(stack)-4]
+					b := stack[len(stack)-5]
+					a := stack[len(stack)-6]
+					if a.kind == tokNum && b.kind == tokNum && c.kind == tokNum &&
+						d.kind == tokNum && e.kind == tokNum && f.kind == tokNum {
+						av, _ := strconv.ParseFloat(a.raw, 64)
+						bv, _ := strconv.ParseFloat(b.raw, 64)
+						cv, _ := strconv.ParseFloat(c.raw, 64)
+						dv, _ := strconv.ParseFloat(d.raw, 64)
+						ev, _ := strconv.ParseFloat(e.raw, 64)
+						fv, _ := strconv.ParseFloat(f.raw, 64)
+						tm = [6]float64{av, bv, cv, dv, ev, fv}
+						cursorX = 0
+					}
+				}
+
+			case "T*":
+				tm = applyTd(tm, 0, -textLeading)
+				cursorX = 0
+
+			case "'":
+				tm = applyTd(tm, 0, -textLeading)
+				cursorX = 0
+				if len(stack) >= 1 {
+					last := stack[len(stack)-1]
+					switch last.kind {
+					case tokStr:
+						data := []byte(parseLiteralString(last.raw))
+						decodeAndRender(data, fontCMaps[currentFont])
+					case tokHex:
+						data := parseHexString(last.raw)
+						decodeAndRender(data, fontCMaps[currentFont])
+					}
+				}
+
+			case "\"":
+				if len(stack) >= 3 {
+					ac := stack[len(stack)-2]
+					if ac.kind == tokNum {
+						_, _ = strconv.ParseFloat(ac.raw, 64)
+					}
+				}
+				if len(stack) >= 2 {
+					aw := stack[len(stack)-3]
+					if aw.kind == tokNum {
+						awVal, _ := strconv.ParseFloat(aw.raw, 64)
+						_ = awVal
+					}
+				}
+				tm = applyTd(tm, 0, -textLeading)
+				cursorX = 0
+				if len(stack) >= 1 {
+					last := stack[len(stack)-1]
+					switch last.kind {
+					case tokStr:
+						data := []byte(parseLiteralString(last.raw))
+						decodeAndRender(data, fontCMaps[currentFont])
+					case tokHex:
+						data := parseHexString(last.raw)
+						decodeAndRender(data, fontCMaps[currentFont])
+					}
+				}
+
+			case "Tj":
+				if len(stack) >= 1 {
+					last := stack[len(stack)-1]
+					switch last.kind {
+					case tokStr:
+						data := []byte(parseLiteralString(last.raw))
+						decodeAndRender(data, fontCMaps[currentFont])
+					case tokHex:
+						data := parseHexString(last.raw)
+						decodeAndRender(data, fontCMaps[currentFont])
+					}
 				}
 
 			case "TJ":
-				flushPending()
-				// TJ array handled in collectTextFromArray which already processes it
-				// but we need to track position - just skip for now
+				// already handled via array path above
+
+			case "TL":
+				if len(stack) >= 1 && stack[len(stack)-1].kind == tokNum {
+					lv, _ := strconv.ParseFloat(stack[len(stack)-1].raw, 64)
+					textLeading = -lv
+				}
+
+			case "Tc":
+				// character spacing - not used for layout
+			case "Tw":
+				// word spacing - not used for layout
+			case "Tz":
+				// horizontal scaling - not used for layout
+			case "Ts":
+				// text rise - not used for layout
+			case "Tr":
+				// text rendering mode - not used for layout
 			}
 
 			stack = stack[:0]
@@ -582,45 +786,8 @@ func textFromContentStream( //nolint:gocyclo,funlen
 		}
 	}
 
-	flushPending()
-	return out.String()
-}
-
-func collectTextFromArray(s *contentScanner, fontCMaps map[string]map[uint16]rune, currentFont string) string {
-	var texts []string
-	for {
-		el, ok := s.next()
-		if !ok || (el.kind == tokArr && el.raw == "]") {
-			break
-		}
-		switch el.kind {
-		case tokStr:
-			texts = append(texts, parseLiteralString(el.raw))
-		case tokHex:
-			cmap := fontCMaps[currentFont]
-			texts = append(texts, decodeText(parseHexString(el.raw), cmap))
-		case tokNum:
-			if val, err := strconv.ParseFloat(el.raw, 64); err == nil && val < 0 {
-				texts = append(texts, " ")
-			}
-		}
-	}
-	return strings.Join(texts, "")
-}
-
-func writeTextFromStack(stack []pdfToken, fontCMaps map[string]map[uint16]rune, currentFont string) string {
-	if len(stack) < 1 {
-		return ""
-	}
-	last := stack[len(stack)-1]
-	switch last.kind {
-	case tokStr:
-		return parseLiteralString(last.raw)
-	case tokHex:
-		cmap := fontCMaps[currentFont]
-		return decodeText(parseHexString(last.raw), cmap)
-	}
-	return ""
+	lines := groupCharsIntoLines(chars, lineGroupTol)
+	return renderLines(lines, wordGapRatio)
 }
 
 // PDFTextExtract uses pdfcpu to extract text from a PDF file.
@@ -657,15 +824,16 @@ func PDFTextExtract(ctx context.Context, filename string) (string, error) {
 
 		pageText := textFromContentStream(data, fontCMaps, fWidths)
 		if pageText != "" {
+			if text.Len() > 0 {
+				text.WriteByte('\n')
+			}
 			text.WriteString(pageText)
-			text.WriteByte('\n')
 		}
 	}
 
 	return text.String(), nil
 }
 
-// buildFontCMaps builds font resource name → CID→rune maps for a given page.
 func buildFontCMaps(ctx *model.Context, pageNr int) map[string]map[uint16]rune {
 	result := make(map[string]map[uint16]rune)
 
@@ -694,7 +862,6 @@ func buildFontCMaps(ctx *model.Context, pageNr int) map[string]map[uint16]rune {
 	return result
 }
 
-// buildFontWidths builds font resource name → glyph widths for a given page.
 func buildFontWidths(ctx *model.Context, pageNr int) map[string]*fontWidths {
 	result := make(map[string]*fontWidths)
 
@@ -723,11 +890,10 @@ func buildFontWidths(ctx *model.Context, pageNr int) map[string]*fontWidths {
 	return result
 }
 
-// fontWidthsFromDict extracts glyph widths from a font dictionary.
 func fontWidthsFromDict(fd types.Dict) *fontWidths {
 	w, found := fd.Find("Widths")
 	if !found || w == nil {
-		return nil
+		return stdFontWidthsFromBaseFont(fd)
 	}
 	arr, ok := w.(types.Array)
 	if !ok || len(arr) == 0 {
@@ -761,8 +927,24 @@ func fontWidthsFromDict(fd types.Dict) *fontWidths {
 	return &fw
 }
 
-// cidToUnicode extracts a CID→rune map from a font dictionary by reading its
-// ToUnicode CMap. For Type0 CIDFonts, it also checks DescendantFonts.
+func stdFontWidthsFromBaseFont(fd types.Dict) *fontWidths {
+	bf, found := fd.Find("BaseFont")
+	if !found || bf == nil {
+		return nil
+	}
+	name, ok := bf.(types.Name)
+	if !ok {
+		return nil
+	}
+	baseName := string(name)
+	fw, ok := stdFontWidths[baseName]
+	if !ok {
+		return nil
+	}
+	cp := *fw
+	return &cp
+}
+
 func cidToUnicode(ctx *model.Context, fd types.Dict) map[uint16]rune {
 	toUnicode, found := fd.Find("ToUnicode")
 	if found && toUnicode != nil {
@@ -795,7 +977,6 @@ func cidToUnicode(ctx *model.Context, fd types.Dict) map[uint16]rune {
 	return resolveToUnicode(ctx, tu)
 }
 
-// resolveToUnicode resolves a ToUnicode reference and parses the CMap.
 func resolveToUnicode(ctx *model.Context, obj types.Object) map[uint16]rune {
 	ir, ok := obj.(types.IndirectRef)
 	if !ok {
@@ -811,33 +992,4 @@ func resolveToUnicode(ctx *model.Context, obj types.Object) map[uint16]rune {
 	}
 
 	return toUnicodeMap(sd.Content)
-}
-
-// getWordGapThreshold returns the minimum advance to consider a word gap.
-// Uses 1.5x the median of recent character advances, minimum 30, or 40 as fallback.
-func getWordGapThreshold(advances []float64) float64 {
-	if len(advances) < 3 {
-		return lowerFallback
-	}
-	median := medianAdvance(advances)
-	threshold := median * 1.5
-	if threshold < minThreshold {
-		threshold = minThreshold
-	}
-	return threshold
-}
-
-// medianAdvance returns the median of character advances.
-func medianAdvance(advances []float64) float64 {
-	if len(advances) == 0 {
-		return fallbackThreshold
-	}
-	sorted := make([]float64, len(advances))
-	copy(sorted, advances)
-	sort.Float64s(sorted)
-	n := len(sorted)
-	if n%2 == 0 {
-		return (sorted[n/2-1] + sorted[n/2]) / 2
-	}
-	return sorted[n/2]
 }

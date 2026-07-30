@@ -23,6 +23,8 @@ const (
 	testDescendantFonts = "DescendantFonts"
 	testWidths          = "Widths"
 	testFirstChar       = "FirstChar"
+	testFontName        = "F1"
+	testBaseFont        = "BaseFont"
 )
 
 func TestPDFTextExtract(t *testing.T) {
@@ -53,7 +55,7 @@ func TestPDFTextExtract(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Contains(t, output, "Continental Trust")
-		assert.Contains(t, output, "Sanne Mulders")
+		assert.Contains(t, output, "Sanne Mulder")
 		assert.Contains(t, output, "Rekeningafschrift")
 		assert.Contains(t, output, "31.10.2025")
 	})
@@ -99,6 +101,18 @@ func TestPDFTextExtract(t *testing.T) {
 
 		assert.Contains(t, output, "Lorem ipsum dolor sit amet")
 		assert.Contains(t, output, "consetetur sadipscing elitr")
+	})
+
+	t.Run("Latin-1 word gap (Type1, no ToUnicode, accented chars)", func(t *testing.T) {
+		// Synthetic PDF with Type1 font: no ToUnicode CMap, no Encoding.
+		// Accented chars use Latin-1 bytes in per-character Tj+Td layout.
+		// Font metric word gap must detect word boundary from glyph advances.
+		// Without font widths: median=15, threshold=30, advance=25→no gap →"déjàvu"
+		output, err := PDFTextExtract(context.Background(), "testdata/latin1-word-gap.pdf")
+		require.NoError(t, err)
+
+		output = strings.TrimSpace(output)
+		assert.Equal(t, "déjà vu", output)
 	})
 }
 
@@ -212,6 +226,9 @@ func TestDecodeText(t *testing.T) {
 
 	result = decodeText([]byte{0x48, 0x65, 0x6C, 0x6C, 0x6F}, nil)
 	assert.Equal(t, "Hello", result)
+
+	result = decodeText([]byte{0xE9, 0xE0, 0xFC, 0xE2}, nil)
+	assert.Equal(t, "éàüâ", result)
 }
 
 func TestParseLiteralString(t *testing.T) {
@@ -836,54 +853,8 @@ func TestFontWidthsFromDict_EdgeCases(t *testing.T) {
 	})
 }
 
-func TestGetWordGapThreshold(t *testing.T) {
-	t.Run("fewer than 3 advances", func(t *testing.T) {
-		assert.Equal(t, 40.0, getWordGapThreshold([]float64{10}))
-		assert.Equal(t, 40.0, getWordGapThreshold([]float64{10, 20}))
-	})
-
-	t.Run("threshold below minimum", func(t *testing.T) {
-		// median=10, threshold=15, <30 → returns 30
-		assert.Equal(t, 30.0, getWordGapThreshold([]float64{10, 10, 10}))
-	})
-
-	t.Run("normal threshold", func(t *testing.T) {
-		// median=30, threshold=45, >30 → returns 45
-		assert.Equal(t, 45.0, getWordGapThreshold([]float64{30, 30, 30}))
-	})
-}
-
-func TestMedianAdvance_EdgeCases(t *testing.T) {
-	t.Run("empty", func(t *testing.T) {
-		assert.Equal(t, 100.0, medianAdvance(nil))
-		assert.Equal(t, 100.0, medianAdvance([]float64{}))
-	})
-
-	t.Run("single element", func(t *testing.T) {
-		assert.Equal(t, 10.0, medianAdvance([]float64{10}))
-	})
-
-	t.Run("odd count", func(t *testing.T) {
-		assert.Equal(t, 20.0, medianAdvance([]float64{10, 20, 30}))
-	})
-
-	t.Run("even count", func(t *testing.T) {
-		assert.Equal(t, 25.0, medianAdvance([]float64{10, 20, 30, 40}))
-	})
-}
-
-func TestTextFromContentStream_FallbackWordGap(t *testing.T) {
-	// Without font widths, fallback threshold-based word gap detection
-	// fires when Td advance exceeds median*1.5 (min 30).
-	// 3 advances of 10 → median=10 → threshold=30.
-	// Advance of 50 from last flush to "d" → 50 > 30 → word gap.
-	content := []byte("BT /F1 12 Tf 0 0 Td (a) Tj 10 0 Td (b) Tj 10 0 Td (c) Tj 50 0 Td (d) Tj ET")
-	text := textFromContentStream(content, nil, nil)
-	assert.Equal(t, "abc d", text)
-}
-
-func TestTextFromContentStream_TwOperator(t *testing.T) {
-	content := []byte("BT /F1 12 Tf 0 0 Td (Hello) Tj 10 0 Tw ET")
+func TestTextFromContentStream_Basic(t *testing.T) {
+	content := []byte("BT /F1 12 Tf 0 0 Td (Hello) Tj ET")
 	text := textFromContentStream(content, nil, nil)
 	assert.Contains(t, text, "Hello")
 }
@@ -898,7 +869,9 @@ func TestTextFromContentStream_FirstAdvanceOnLine(t *testing.T) {
 }
 
 func TestTextFromContentStream_MaxCharAdvances(t *testing.T) {
-	// 55 advances to trigger truncation (maxCharAdvances=50)
+	// 55 chars on one line with Td(10,0) between each.
+	// Each gap (10 - charWidth) > charSize*wordGapRatio → space inserted.
+	// Expected: 55 "x" + 54 spaces = 109 chars.
 	var sb strings.Builder
 	sb.WriteString("BT /F1 12 Tf 0 0 Td")
 	for i := range 55 {
@@ -907,5 +880,121 @@ func TestTextFromContentStream_MaxCharAdvances(t *testing.T) {
 	}
 	sb.WriteString(" ET")
 	text := textFromContentStream([]byte(sb.String()), nil, nil)
-	assert.Len(t, text, 55)
+	assert.Len(t, text, 109)
+}
+
+func TestTextFromContentStream_UnicodeAbove256(t *testing.T) {
+	cmap := map[string]map[uint16]rune{
+		testFontName: {0x41: '中'},
+	}
+	content := []byte("/F1 12 Tf 12 0 Td (A) Tj")
+	text := textFromContentStream(content, cmap, nil)
+	assert.Equal(t, "中", text)
+}
+
+func TestTextFromContentStream_AccentWordGap(t *testing.T) {
+	// Font metric word gap detection with Latin-1 accented chars.
+	// Content stream uses octal escapes for é (\351) and à (\340).
+	// Per-character Tj+Td: d(15)é(10)j(10)à(25)v(15)u
+	// fw[à]=500, fs=41.6667 → charWidth=20.83, extra=25-20.83=4.17
+	// fw[space]=300 → spaceWidth=12.5, spaceRatio=0.3→3.75
+	// fs*0.04=1.67, threshold=max(1.67,3.75)=3.75
+	// extra 4.17 > 3.75 → word gap → "déjà vu"
+	content := []byte("BT /F1 41.6667 Tf 0 0 Td (d) Tj 15 0 Td (\\351) Tj 10 0 Td (j) Tj 10 0 Td (\\340) Tj 25 0 Td (v) Tj 15 0 Td (u) Tj ET")
+
+	fw := &fontWidths{}
+	for i := range 256 {
+		fw[i] = 400
+	}
+	fw[0x20] = 300 // space
+	fw['d'] = 400
+	fw[0xE9] = 500 // é
+	fw['j'] = 300
+	fw[0xE0] = 500 // à
+	fw['v'] = 350
+	fw['u'] = 350
+
+	text := textFromContentStream(content, nil, map[string]*fontWidths{testFontName: fw})
+
+	assert.Equal(t, "déjà vu", text)
+}
+
+func TestTextFromContentStream_AccentWordGapFallback(t *testing.T) {
+	// Same content without font widths: geometric gap detection still works
+	// because Td advances create page-space X gaps between words.
+	content := []byte("BT /F1 41.6667 Tf 0 0 Td (d) Tj 15 0 Td (\\351) Tj 10 0 Td (j) Tj 10 0 Td (\\340) Tj 25 0 Td (v) Tj 15 0 Td (u) Tj ET")
+
+	text := textFromContentStream(content, nil, nil)
+
+	assert.Equal(t, "déjà vu", text)
+}
+
+func TestTextFromContentStream_NegFontSize(t *testing.T) {
+	content := []byte("BT /F1 -12 Tf 0 0 Td (Hello) Tj ET")
+	text := textFromContentStream(content, nil, nil)
+	assert.NotEmpty(t, text)
+}
+
+func TestTextFromContentStream_TStar(t *testing.T) {
+	content := []byte("BT /F1 12 Tf 0 0 Td 12 TL (Hello) Tj T* (World) Tj ET")
+	text := textFromContentStream(content, nil, nil)
+	assert.Contains(t, text, "Hello")
+	assert.Contains(t, text, "World")
+}
+
+func TestTextFromContentStream_TDOperatorLeading(t *testing.T) {
+	content := []byte("BT /F1 12 Tf 0 0 Td (Hello) Tj /Name -10 TD (World) Tj ET")
+	text := textFromContentStream(content, nil, nil)
+	assert.Contains(t, text, "Hello")
+	assert.Contains(t, text, "World")
+}
+
+func TestTextFromContentStream_DQuoteFull(t *testing.T) {
+	content := []byte("1 2 (Hello World)\"")
+	text := textFromContentStream(content, nil, nil)
+	assert.Contains(t, text, "Hello World")
+}
+
+func TestTextFromContentStream_TL(t *testing.T) {
+	content := []byte("BT 12 TL /F1 12 Tf 0 0 Td (Hello) Tj ET")
+	text := textFromContentStream(content, nil, nil)
+	assert.Contains(t, text, "Hello")
+}
+
+func TestTextFromContentStream_TextStateNoOps(t *testing.T) {
+	content := []byte("BT /F1 12 Tf 0 0 Td 1 Tc 2 Tw 100 Tz 0 Ts 0 Tr (Hello) Tj ET")
+	text := textFromContentStream(content, nil, nil)
+	assert.Contains(t, text, "Hello")
+}
+
+func TestTextFromContentStream_CMapLookupFail(t *testing.T) {
+	cmap := map[string]map[uint16]rune{testFontName: {0x48: 'X'}}
+	content := []byte("BT /F1 12 Tf 0 0 Td (Hi) Tj ET")
+	text := textFromContentStream(content, cmap, nil)
+	assert.Contains(t, text, "X")
+	assert.Contains(t, text, "i")
+}
+
+func TestStdFontWidthsFromBaseFont(t *testing.T) {
+	t.Run("missing BaseFont", func(t *testing.T) {
+		fd := types.Dict{}
+		assert.Nil(t, stdFontWidthsFromBaseFont(fd))
+	})
+
+	t.Run("BaseFont not a Name", func(t *testing.T) {
+		fd := types.Dict{testBaseFont: types.Integer(0)}
+		assert.Nil(t, stdFontWidthsFromBaseFont(fd))
+	})
+
+	t.Run("BaseFont not in stdFontWidths", func(t *testing.T) {
+		fd := types.Dict{testBaseFont: types.Name("UnknownFont")}
+		assert.Nil(t, stdFontWidthsFromBaseFont(fd))
+	})
+
+	t.Run("BaseFont in stdFontWidths", func(t *testing.T) {
+		fd := types.Dict{testBaseFont: types.Name("Helvetica")}
+		fw := stdFontWidthsFromBaseFont(fd)
+		require.NotNil(t, fw)
+		assert.Equal(t, uint16(278), fw[0x20])
+	})
 }

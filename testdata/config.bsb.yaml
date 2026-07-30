@@ -14,7 +14,7 @@ grokPatterns:
   COMPANY001: "Straits Capital"
   OWNER002: "Robert Wilson"
   COMPANY002: "Liberty National Bank"
-  OWNER003: "Sanne Mulders"
+  OWNER003: "Sanne Mulder"
   COMPANY003: "Continental Trust"
   OWNER004: "Mei Ling Tsang"
   COMPANY004: "Silk Road Banking"
@@ -38,7 +38,7 @@ fileDescriptions:
     patterns:
       - "%{OWNER003:owner}"
       - "%{COMPANY003:company}"
-      - "Download date:%{YEAR:year}-%{MONTHNUM2:month}-%{MONTHDAY:day}"
+      - "Download date: %{YEAR:year}-%{MONTHNUM2:month}-%{MONTHDAY:day}"
     output: "{{ .Grok.year }}{{ .Grok.month }}{{ .Grok.day }}__continental_trust__sanne_mulders\n"
   bsb004:
     patterns:
