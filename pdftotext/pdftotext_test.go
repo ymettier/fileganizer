@@ -975,6 +975,26 @@ func TestTextFromContentStream_CMapLookupFail(t *testing.T) {
 	assert.Contains(t, text, "i")
 }
 
+func TestParse6Numbers(t *testing.T) {
+	t.Run("too few elements", func(t *testing.T) {
+		_, ok := parse6Numbers([]pdfToken{{kind: tokNum, raw: "1"}})
+		assert.False(t, ok)
+	})
+
+	t.Run("non-numeric element", func(t *testing.T) {
+		st := []pdfToken{
+			{kind: tokNum, raw: "1"},
+			{kind: tokNum, raw: "2"},
+			{kind: tokNum, raw: "3"},
+			{kind: tokNum, raw: "4"},
+			{kind: tokName, raw: "/F1"},
+			{kind: tokNum, raw: "6"},
+		}
+		_, ok := parse6Numbers(st)
+		assert.False(t, ok)
+	})
+}
+
 func TestStdFontWidthsFromBaseFont(t *testing.T) {
 	t.Run("missing BaseFont", func(t *testing.T) {
 		fd := types.Dict{}

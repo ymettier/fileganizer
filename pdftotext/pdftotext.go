@@ -504,92 +504,232 @@ func renderLines(lines [][]positionedChar, wordRatio float64) string {
 	return out.String()
 }
 
+func parse6Numbers(st []pdfToken) ([6]float64, bool) {
+	if len(st) < 6 { //nolint:mnd
+		return [6]float64{}, false
+	}
+	for i := len(st) - 6; i < len(st); i++ {
+		if st[i].kind != tokNum {
+			return [6]float64{}, false
+		}
+	}
+	var nums [6]float64
+	for i := 0; i < 6; i++ {
+		nums[i], _ = strconv.ParseFloat(st[len(st)-6+i].raw, 64)
+	}
+	return nums, true
+}
+
+type textRenderer struct {
+	fontCMaps map[string]map[uint16]rune
+	fWidths   map[string]*fontWidths
+
+	stack       []pdfToken
+	currentFont string
+	fontSize    float64
+	ctm         [6]float64
+	ctmStack    [][6]float64
+	tm          [6]float64
+	textLeading float64
+	cursorX     float64
+	chars       []positionedChar
+}
+
+func (r *textRenderer) pushChar(text string, curX float64) {
+	px, py := textRenderPos(r.ctm, r.tm)
+	x0 := px + math.Min(r.cursorX, curX)
+	x1 := px + math.Max(r.cursorX, curX)
+	if x1-x0 < 0.1 { //nolint:mnd
+		x1 = x0 + r.fontSize
+	}
+	r.chars = append(r.chars, positionedChar{
+		x0: x0, y0: py, x1: x1, y1: py - r.fontSize, text: text,
+	})
+}
+
+func (r *textRenderer) decodeAndRender(data []byte, cmap map[uint16]rune) {
+	fw := r.fWidths[r.currentFont]
+	for i := 0; i < len(data); {
+		var cid byte
+		var ch rune
+		var advance float64
+
+		if cmap != nil && i+1 < len(data) {
+			cidPair := uint16(data[i])<<8 | uint16(data[i+1])
+			if r2, ok := cmap[cidPair]; ok {
+				ch = r2
+				cid = data[i]
+				advance = charWidth(fw, cid, r.fontSize)
+				r.pushChar(string(ch), r.cursorX+advance)
+				r.cursorX += advance
+				i += 2
+				continue
+			}
+		}
+		cid = data[i]
+		advance = charWidth(fw, cid, r.fontSize)
+		if cmap != nil {
+			if r2, ok := cmap[uint16(cid)]; ok {
+				ch = r2
+			} else {
+				ch = rune(cid)
+			}
+		} else {
+			ch = rune(cid)
+		}
+		r.pushChar(string(ch), r.cursorX+advance)
+		r.cursorX += advance
+		i++
+	}
+}
+
+func (r *textRenderer) renderTJArray(seq []pdfToken) {
+	cmap := r.fontCMaps[r.currentFont]
+	for _, el := range seq {
+		switch el.kind {
+		case tokStr:
+			data := []byte(parseLiteralString(el.raw))
+			r.decodeAndRender(data, cmap)
+		case tokHex:
+			data := parseHexString(el.raw)
+			r.decodeAndRender(data, cmap)
+		case tokNum:
+			if val, err := strconv.ParseFloat(el.raw, 64); err == nil {
+				r.cursorX -= val * 0.001 * r.fontSize
+			}
+		}
+	}
+}
+
+func (r *textRenderer) readAndRenderTJArray(s *contentScanner) {
+	var seq []pdfToken
+	for {
+		el, ok := s.next()
+		if !ok || (el.kind == tokArr && el.raw == "]") {
+			break
+		}
+		seq = append(seq, el)
+	}
+	r.renderTJArray(seq)
+}
+
+func (r *textRenderer) handlePushCTM() {
+	var cpy [6]float64
+	copy(cpy[:], r.ctm[:])
+	r.ctmStack = append(r.ctmStack, cpy)
+}
+
+func (r *textRenderer) handlePopCTM() {
+	if len(r.ctmStack) > 0 {
+		r.ctm = r.ctmStack[len(r.ctmStack)-1]
+		r.ctmStack = r.ctmStack[:len(r.ctmStack)-1]
+	}
+}
+
+func (r *textRenderer) handleConcatMatrix() {
+	nums, ok := parse6Numbers(r.stack)
+	if ok {
+		r.ctm = multMatrices(nums, r.ctm)
+	}
+}
+
+func (r *textRenderer) handleBeginText() {
+	r.tm = [6]float64{1, 0, 0, 1, 0, 0}
+	r.cursorX = 0
+}
+
+func (r *textRenderer) handleSetFont() {
+	if len(r.stack) >= 2 && r.stack[len(r.stack)-2].kind == tokName {
+		r.currentFont = strings.TrimPrefix(r.stack[len(r.stack)-2].raw, "/")
+	}
+	if len(r.stack) >= 1 && r.stack[len(r.stack)-1].kind == tokNum {
+		fs, err := strconv.ParseFloat(r.stack[len(r.stack)-1].raw, 64)
+		if err == nil {
+			r.fontSize = fs
+		}
+	}
+}
+
+func (r *textRenderer) handleTextMove(tok string) {
+	if len(r.stack) >= 2 {
+		ty := r.stack[len(r.stack)-1]
+		tx := r.stack[len(r.stack)-2]
+		if tx.kind == tokNum && ty.kind == tokNum {
+			txVal, _ := strconv.ParseFloat(tx.raw, 64)
+			tyVal, _ := strconv.ParseFloat(ty.raw, 64)
+			r.tm = applyTd(r.tm, txVal, tyVal)
+			r.cursorX = 0
+		}
+	}
+	if tok == "TD" && len(r.stack) >= 1 {
+		ty := r.stack[len(r.stack)-1]
+		if ty.kind == tokNum {
+			tyVal, _ := strconv.ParseFloat(ty.raw, 64)
+			r.textLeading = -tyVal
+		}
+	}
+}
+
+func (r *textRenderer) handleSetTextMatrix() {
+	nums, ok := parse6Numbers(r.stack)
+	if ok {
+		r.tm = nums
+		r.cursorX = 0
+	}
+}
+
+func (r *textRenderer) handleTextStar() {
+	r.tm = applyTd(r.tm, 0, -r.textLeading)
+	r.cursorX = 0
+}
+
+func (r *textRenderer) renderTopString() {
+	if len(r.stack) < 1 {
+		return
+	}
+	last := r.stack[len(r.stack)-1]
+	switch last.kind {
+	case tokStr:
+		data := []byte(parseLiteralString(last.raw))
+		r.decodeAndRender(data, r.fontCMaps[r.currentFont])
+	case tokHex:
+		data := parseHexString(last.raw)
+		r.decodeAndRender(data, r.fontCMaps[r.currentFont])
+	}
+}
+
+func (r *textRenderer) handleShowText() {
+	r.renderTopString()
+}
+
+func (r *textRenderer) handleQuoteSingle() {
+	r.handleTextStar()
+	r.renderTopString()
+}
+
+func (r *textRenderer) handleQuoteDouble() {
+	r.handleTextStar()
+	r.renderTopString()
+}
+
+func (r *textRenderer) handleSetTextLeading() {
+	if len(r.stack) >= 1 && r.stack[len(r.stack)-1].kind == tokNum {
+		lv, _ := strconv.ParseFloat(r.stack[len(r.stack)-1].raw, 64)
+		r.textLeading = -lv
+	}
+}
+
 // textFromContentStream parses a PDF content stream and extracts text with
 // position tracking, then groups characters into lines geometrically.
-func textFromContentStream( //nolint:gocyclo,funlen
+func textFromContentStream( //nolint:gocyclo
 	content []byte, fontCMaps map[string]map[uint16]rune, fWidths map[string]*fontWidths,
 ) string {
 	s := &contentScanner{data: content}
-	var stack []pdfToken
-	var currentFont string
-	var fontSize float64
-
-	ctm := [6]float64{1, 0, 0, 1, 0, 0}
-	var ctmStack [][6]float64
-	tm := [6]float64{1, 0, 0, 1, 0, 0}
-	var textLeading float64
-	var cursorX float64
-
-	var chars []positionedChar
-
-	pushChar := func(text string, curX float64) {
-		px, py := textRenderPos(ctm, tm)
-		x0 := px + math.Min(cursorX, curX)
-		x1 := px + math.Max(cursorX, curX)
-		if x1-x0 < 0.1 { //nolint:mnd
-			x1 = x0 + fontSize
-		}
-		chars = append(chars, positionedChar{
-			x0:   x0,
-			y0:   py,
-			x1:   x1,
-			y1:   py - fontSize,
-			text: text,
-		})
-	}
-
-	decodeAndRender := func(data []byte, cmap map[uint16]rune) {
-		fw := fWidths[currentFont]
-		for i := 0; i < len(data); {
-			var cid byte
-			var r rune
-			var advance float64
-
-			if cmap != nil && i+1 < len(data) {
-				cidPair := uint16(data[i])<<8 | uint16(data[i+1])
-				if r2, ok := cmap[cidPair]; ok {
-					r = r2
-					cid = data[i]
-					advance = charWidth(fw, cid, fontSize)
-					pushChar(string(r), cursorX+advance)
-					cursorX += advance
-					i += 2
-					continue
-				}
-			}
-			cid = data[i]
-			advance = charWidth(fw, cid, fontSize)
-			if cmap != nil {
-				if r2, ok := cmap[uint16(cid)]; ok {
-					r = r2
-				} else {
-					r = rune(cid)
-				}
-			} else {
-				r = rune(cid)
-			}
-			pushChar(string(r), cursorX+advance)
-			cursorX += advance
-			i++
-		}
-	}
-
-	renderTJArray := func(seq []pdfToken) {
-		cmap := fontCMaps[currentFont]
-		for _, el := range seq {
-			switch el.kind {
-			case tokStr:
-				data := []byte(parseLiteralString(el.raw))
-				decodeAndRender(data, cmap)
-			case tokHex:
-				data := parseHexString(el.raw)
-				decodeAndRender(data, cmap)
-			case tokNum:
-				if val, err := strconv.ParseFloat(el.raw, 64); err == nil {
-					cursorX -= val * 0.001 * fontSize
-				}
-			}
-		}
+	r := &textRenderer{
+		fontCMaps: fontCMaps,
+		fWidths:   fWidths,
+		ctm:       [6]float64{1, 0, 0, 1, 0, 0},
+		tm:        [6]float64{1, 0, 0, 1, 0, 0},
 	}
 
 	for {
@@ -599,194 +739,47 @@ func textFromContentStream( //nolint:gocyclo,funlen
 		}
 
 		if tok.kind == tokArr && tok.raw == "[" {
-			var seq []pdfToken
-			for {
-				el, ok := s.next()
-				if !ok || (el.kind == tokArr && el.raw == "]") {
-					break
-				}
-				seq = append(seq, el)
-			}
-			renderTJArray(seq)
+			r.readAndRenderTJArray(s)
 			continue
 		}
 
 		if tok.kind == tokKw {
 			switch tok.raw {
 			case "q":
-				var cpy [6]float64
-				copy(cpy[:], ctm[:])
-				ctmStack = append(ctmStack, cpy)
-
+				r.handlePushCTM()
 			case "Q":
-				if len(ctmStack) > 0 {
-					ctm = ctmStack[len(ctmStack)-1]
-					ctmStack = ctmStack[:len(ctmStack)-1]
-				}
-
+				r.handlePopCTM()
 			case "cm":
-				if len(stack) >= 6 { //nolint:mnd
-					f := stack[len(stack)-1]
-					e := stack[len(stack)-2]
-					d := stack[len(stack)-3]
-					c := stack[len(stack)-4]
-					b := stack[len(stack)-5]
-					a := stack[len(stack)-6]
-					if a.kind == tokNum && b.kind == tokNum && c.kind == tokNum &&
-						d.kind == tokNum && e.kind == tokNum && f.kind == tokNum {
-						av, _ := strconv.ParseFloat(a.raw, 64)
-						bv, _ := strconv.ParseFloat(b.raw, 64)
-						cv, _ := strconv.ParseFloat(c.raw, 64)
-						dv, _ := strconv.ParseFloat(d.raw, 64)
-						ev, _ := strconv.ParseFloat(e.raw, 64)
-						fv, _ := strconv.ParseFloat(f.raw, 64)
-						ctm = multMatrices([6]float64{av, bv, cv, dv, ev, fv}, ctm)
-					}
-				}
-
+				r.handleConcatMatrix()
 			case "BT":
-				tm = [6]float64{1, 0, 0, 1, 0, 0}
-				cursorX = 0
-
+				r.handleBeginText()
 			case "Tf":
-				if len(stack) >= 2 && stack[len(stack)-2].kind == tokName {
-					currentFont = strings.TrimPrefix(stack[len(stack)-2].raw, "/")
-				}
-				if len(stack) >= 1 && stack[len(stack)-1].kind == tokNum {
-					fs, err := strconv.ParseFloat(stack[len(stack)-1].raw, 64)
-					if err == nil {
-						fontSize = fs
-					}
-				}
-
+				r.handleSetFont()
 			case "Td", "TD":
-				if len(stack) >= 2 {
-					ty := stack[len(stack)-1]
-					tx := stack[len(stack)-2]
-					if tx.kind == tokNum && ty.kind == tokNum {
-						txVal, _ := strconv.ParseFloat(tx.raw, 64)
-						tyVal, _ := strconv.ParseFloat(ty.raw, 64)
-						tm = applyTd(tm, txVal, tyVal)
-						cursorX = 0
-					}
-				}
-				if tok.raw == "TD" && len(stack) >= 1 {
-					ty := stack[len(stack)-1]
-					if ty.kind == tokNum {
-						tyVal, _ := strconv.ParseFloat(ty.raw, 64)
-						textLeading = -tyVal
-					}
-				}
-
+				r.handleTextMove(tok.raw)
 			case "Tm":
-				if len(stack) >= 6 { //nolint:mnd
-					f := stack[len(stack)-1]
-					e := stack[len(stack)-2]
-					d := stack[len(stack)-3]
-					c := stack[len(stack)-4]
-					b := stack[len(stack)-5]
-					a := stack[len(stack)-6]
-					if a.kind == tokNum && b.kind == tokNum && c.kind == tokNum &&
-						d.kind == tokNum && e.kind == tokNum && f.kind == tokNum {
-						av, _ := strconv.ParseFloat(a.raw, 64)
-						bv, _ := strconv.ParseFloat(b.raw, 64)
-						cv, _ := strconv.ParseFloat(c.raw, 64)
-						dv, _ := strconv.ParseFloat(d.raw, 64)
-						ev, _ := strconv.ParseFloat(e.raw, 64)
-						fv, _ := strconv.ParseFloat(f.raw, 64)
-						tm = [6]float64{av, bv, cv, dv, ev, fv}
-						cursorX = 0
-					}
-				}
-
+				r.handleSetTextMatrix()
 			case "T*":
-				tm = applyTd(tm, 0, -textLeading)
-				cursorX = 0
-
+				r.handleTextStar()
 			case "'":
-				tm = applyTd(tm, 0, -textLeading)
-				cursorX = 0
-				if len(stack) >= 1 {
-					last := stack[len(stack)-1]
-					switch last.kind {
-					case tokStr:
-						data := []byte(parseLiteralString(last.raw))
-						decodeAndRender(data, fontCMaps[currentFont])
-					case tokHex:
-						data := parseHexString(last.raw)
-						decodeAndRender(data, fontCMaps[currentFont])
-					}
-				}
-
+				r.handleQuoteSingle()
 			case "\"":
-				if len(stack) >= 3 {
-					ac := stack[len(stack)-2]
-					if ac.kind == tokNum {
-						_, _ = strconv.ParseFloat(ac.raw, 64)
-					}
-				}
-				if len(stack) >= 2 {
-					aw := stack[len(stack)-3]
-					if aw.kind == tokNum {
-						awVal, _ := strconv.ParseFloat(aw.raw, 64)
-						_ = awVal
-					}
-				}
-				tm = applyTd(tm, 0, -textLeading)
-				cursorX = 0
-				if len(stack) >= 1 {
-					last := stack[len(stack)-1]
-					switch last.kind {
-					case tokStr:
-						data := []byte(parseLiteralString(last.raw))
-						decodeAndRender(data, fontCMaps[currentFont])
-					case tokHex:
-						data := parseHexString(last.raw)
-						decodeAndRender(data, fontCMaps[currentFont])
-					}
-				}
-
+				r.handleQuoteDouble()
 			case "Tj":
-				if len(stack) >= 1 {
-					last := stack[len(stack)-1]
-					switch last.kind {
-					case tokStr:
-						data := []byte(parseLiteralString(last.raw))
-						decodeAndRender(data, fontCMaps[currentFont])
-					case tokHex:
-						data := parseHexString(last.raw)
-						decodeAndRender(data, fontCMaps[currentFont])
-					}
-				}
-
+				r.handleShowText()
 			case "TJ":
 				// already handled via array path above
-
 			case "TL":
-				if len(stack) >= 1 && stack[len(stack)-1].kind == tokNum {
-					lv, _ := strconv.ParseFloat(stack[len(stack)-1].raw, 64)
-					textLeading = -lv
-				}
-
-			case "Tc":
-				// character spacing - not used for layout
-			case "Tw":
-				// word spacing - not used for layout
-			case "Tz":
-				// horizontal scaling - not used for layout
-			case "Ts":
-				// text rise - not used for layout
-			case "Tr":
-				// text rendering mode - not used for layout
+				r.handleSetTextLeading()
 			}
 
-			stack = stack[:0]
+			r.stack = r.stack[:0]
 		} else {
-			stack = append(stack, tok)
+			r.stack = append(r.stack, tok)
 		}
 	}
 
-	lines := groupCharsIntoLines(chars, lineGroupTol)
+	lines := groupCharsIntoLines(r.chars, lineGroupTol)
 	return renderLines(lines, wordGapRatio)
 }
 
