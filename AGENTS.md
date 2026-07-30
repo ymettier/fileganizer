@@ -63,6 +63,7 @@ Fileganizer is a Go CLI tool that processes documents through a pipeline: text e
 - Group imports: stdlib first, third-party second, internal (`fileganizer/...`) last.
 - Flags (like `-c` or `-f`) are never constants. When the linter complains, add `//nolint`.
 - No global or function-scoped `//nolint`. Only line-scoped `//nolint` is allowed.
+- Exception: `pdftotext/fontwidths_std.go` may use declaration-scoped `//nolint:gochecknoglobals,dupl` — the font metric data is inherently repetitive and the global map is intentional.
 - Keep the whole code simple and stupid (KISS). No over-engineering, no unnecessary abstractions.
 - Copyright header on every source file. For `.go` files:
   ```go
