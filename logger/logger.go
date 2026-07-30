@@ -4,7 +4,6 @@
 package logger
 
 import (
-	"context"
 	"io"
 	"log/slog"
 	"os"
@@ -13,8 +12,6 @@ import (
 
 	"gopkg.in/natefinch/lumberjack.v2"
 )
-
-type ctxKey struct{}
 
 var (
 	mu     sync.RWMutex
@@ -143,18 +140,4 @@ func Reset(opts *LogOptions) {
 		logger.closer.Close()
 	}
 	logger = newLogger(opts)
-}
-
-// FromCtx returns the Logger associated with the ctx. If no logger
-// is associated, the default logger is returned.
-func FromCtx(ctx context.Context) *Logger {
-	if l, ok := ctx.Value(ctxKey{}).(*Logger); ok {
-		return l
-	}
-	return Get()
-}
-
-// WithCtx returns a copy of ctx with the Logger attached.
-func WithCtx(ctx context.Context, l *Logger) context.Context {
-	return context.WithValue(ctx, ctxKey{}, l)
 }

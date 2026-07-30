@@ -1,0 +1,77 @@
+Rekeningafschrift
+Rekeninghouder Bank information
+Sanne Mulder Continental Trust N.V.
+s.mulder@email.nl Chamber of Commerce: 54992060
+Keizersgracht 42 Herengracht 100
+1015 CX Amsterdam 1015 BS Amsterdam
+Netherlands The Netherlands
+Account details
+IBAN: GG 76WFER 75020793
+BIC: CTRUNL2A
+Personal account
+Balance as of 01.10.2025: 15.320,00 
+Balance as of 31.10.2025: 14.470,04 
+Total incoming: 7.961,62 
+Total outgoing: 8.811,58  Continental Trust N.V.
+1015 BS Amsterdam
+Download date: 2025-10-31
+The Netherlands
+Date Interest Date Counterparty Description Amount
+2 okt 02.10 PARKEERGARAGE GELDAUTOMAAT -19,25 
+NL97PARK7122682547
+SYNTHETIC BENCHMARK DOCUMENT
+3 okt 03.10 PARKEERGARAGE OVERBOEKING -122,38 
+NL46PARK8647332175
+6 okt 06.10 THUISBEZORGD.NL SERVICEKOSTEN -8,56 
+NL35THUI4931982673
+7 okt 07.10 SPORTSCHOOL PERIODIEKE OVERBOEKING -543,12 
+NL35SPOR2606778542
+7 okt 07.10 KRUIDVAT SEPA OVERBOEKING -54,64 
+NL49KRUI7579719220
+9 okt 09.10 ALBERT HEIJN GELDAUTOMAAT -110,53 
+NL53ALBE3085864637
+10 okt 10.10 ACTION DISCOUNT SEPA DEBIT -203,63 
+NL66ACTI5740704027
+12 okt 12.10 APOTHEEK TIKKIE BETAALD -202,58 
+NL49APOT7763050619
+16 okt 16.10 FLEUR DE GROOT STORTING 7.470,82 
+NL21FLEU7342322726
+17 okt 17.10 LISA JANSEN CREDITRENTE 70,87 
+NL96LISA6942683601
+18 okt 18.10 THUISBEZORGD.NL INCASSO -27,59 
+NL17THUI9771787441
+19 okt 19.10 THOMAS JANSEN IDEAL ONTVANGEN 177,92 
+NL10THOM6431494744
+21 okt 21.10 SANNE BAKKER SALARISBETALING 242,01 
+NL58SANN1268322752
+2N2o  orikgthts can be d2e2r.i1v0ed from this oveHrvEieMw.A OVERSCHRIJVING -25,75 1/3
+This product is eligible for the Deposit Guarantee Scheme. For more information, please consult our Deposit 
+Guarantee Information page.
+NL61HEMA5238250191
+22 okt 22.10 OV-CHIPKAART SEPA INCASSO -7,71 
+NL90OVCH7973098455
+23 okt 23.10 KRUIDVAT IDEAL BETALING -2.572,95 
+NL30KRUI6515768228
+SYNTHETIC BENCHMARK DOCUMENT
+No rights can be derived from this overview. 2/3
+This product is eligible for the Deposit Guarantee Scheme. For more information, please consult our Deposit 
+Guarantee Information page.
+Transaction overview for GG 76WFER 75020793
+Date Interest Date Counterparty Description Amount
+23 okt 23.10 UBER EATS NL SERVICEKOSTEN -493,26 
+NL93UBER8394587747
+24 okt 24.10 OV-CHIPKAART PIN -1.442,02 
+NL61OVCH1750144517
+27 okt 27.10 ZIGGO INTERNET GELDAUTOMAAT -73,87 
+NL40ZIGG1764774995
+28 okt 28.10 ALBERT HEIJN SEPA OVERBOEKING -463,01 
+NL32ALBE2812478251
+28 okt 28.10 COOLBLUE OVERSCHRIJVING -2.390,66 
+NL94COOL4358057468
+29 okt 29.10 KLEDINGWINKEL AUTOMATISCHE INCASSO -50,07 
+NL57KLED7387925551
+Download date: 2025-10-31
+SYNTHETIC BENCHMARK DOCUMENT
+No rights can be derived from this overview. 3/3
+This product is eligible for the Deposit Guarantee Scheme. For more information, please consult our Deposit 
+Guarantee Information page.

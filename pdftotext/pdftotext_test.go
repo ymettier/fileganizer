@@ -116,6 +116,37 @@ func TestPDFTextExtract(t *testing.T) {
 	})
 }
 
+func TestPDFTextExtract_Reference(t *testing.T) {
+	refs := []struct {
+		name string
+		pdf  string
+		txt  string
+	}{
+		{name: "bsb-001", pdf: testdataDir + "/bsb-001-statement.pdf", txt: testdataDir + "/bsb-001-statement.txt"},
+		{name: "bsb-002", pdf: testdataDir + "/bsb-002-statement.pdf", txt: testdataDir + "/bsb-002-statement.txt"},
+		{name: "bsb-003", pdf: testdataDir + "/bsb-003-statement.pdf", txt: testdataDir + "/bsb-003-statement.txt"},
+		{name: "bsb-004", pdf: testdataDir + "/bsb-004-statement.pdf", txt: testdataDir + "/bsb-004-statement.txt"},
+		{name: "bsb-005", pdf: testdataDir + "/bsb-005-statement.pdf", txt: testdataDir + "/bsb-005-statement.txt"},
+		{name: "control-char", pdf: testdataDir + "/control-char.pdf", txt: testdataDir + "/control-char.txt"},
+		{name: "forged-invoice", pdf: testdataDir + "/forged-invoice.pdf", txt: testdataDir + "/forged-invoice.txt"},
+		{name: "latin1-word-gap", pdf: testdataDir + "/latin1-word-gap.pdf", txt: testdataDir + "/latin1-word-gap.txt"},
+		{name: "pdflatex-per-char-text", pdf: testdataDir + "/pdflatex-per-char-text.pdf", txt: testdataDir + "/pdflatex-per-char-text.txt"},
+		{name: "per-char-test", pdf: testdataDir + "/per-char-test.pdf", txt: testdataDir + "/per-char-test.txt"},
+	}
+
+	for _, ref := range refs {
+		t.Run(ref.name, func(t *testing.T) {
+			expected, err := os.ReadFile(ref.txt)
+			require.NoError(t, err)
+
+			output, err := PDFTextExtract(context.Background(), ref.pdf)
+			require.NoError(t, err)
+
+			assert.Equal(t, strings.TrimRight(string(expected), "\n\r"), output)
+		})
+	}
+}
+
 func TestPDFTextExtractFileNotFound(t *testing.T) {
 	_, err := PDFTextExtract(context.Background(), "nonexistent.pdf")
 	assert.Error(t, err)
@@ -973,6 +1004,26 @@ func TestTextFromContentStream_CMapLookupFail(t *testing.T) {
 	text := textFromContentStream(content, cmap, nil)
 	assert.Contains(t, text, "X")
 	assert.Contains(t, text, "i")
+}
+
+func TestParse6Numbers(t *testing.T) {
+	t.Run("too few elements", func(t *testing.T) {
+		_, ok := parse6Numbers([]pdfToken{{kind: tokNum, raw: "1"}})
+		assert.False(t, ok)
+	})
+
+	t.Run("non-numeric element", func(t *testing.T) {
+		st := []pdfToken{
+			{kind: tokNum, raw: "1"},
+			{kind: tokNum, raw: "2"},
+			{kind: tokNum, raw: "3"},
+			{kind: tokNum, raw: "4"},
+			{kind: tokName, raw: "/F1"},
+			{kind: tokNum, raw: "6"},
+		}
+		_, ok := parse6Numbers(st)
+		assert.False(t, ok)
+	})
 }
 
 func TestStdFontWidthsFromBaseFont(t *testing.T) {
