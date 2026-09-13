@@ -44,7 +44,7 @@ func formatVersion(version string) string {
 		switch kv.Key {
 		case "vcs.revision":
 			revision = kv.Value
-		case "vcs.time": //nolint:goconst
+		case "vcs.time":
 			rawLastCommit = kv.Value
 			lastCommit, parseVCSTimeErr = time.Parse(time.RFC3339, kv.Value)
 			if parseVCSTimeErr != nil {

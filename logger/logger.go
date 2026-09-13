@@ -51,7 +51,7 @@ func getWriter(opts *LogOptions) (io.Writer, io.Closer, bool) {
 	switch filename {
 	case "stdout":
 		return os.Stdout, nil, false
-	case "stderr": //nolint:goconst
+	case "stderr":
 		return os.Stderr, nil, false
 	}
 
