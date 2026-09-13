@@ -48,7 +48,7 @@ func TestVersionWithBuildInfo(t *testing.T) {
 			GoVersion: "go1.21.0",
 			Settings: []debug.BuildSetting{
 				{Key: "vcs.revision", Value: "abc123"},
-				{Key: "vcs.time", Value: "2024-01-15T10:30:00Z"}, //nolint:goconst
+				{Key: "vcs.time", Value: "2024-01-15T10:30:00Z"},
 				{Key: "vcs.modified", Value: "true"},
 				{Key: "vcs.unknown", Value: ""},
 			},

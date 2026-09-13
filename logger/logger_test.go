@@ -137,7 +137,7 @@ func TestReset(t *testing.T) {
 	l1 := Get()
 	require.NotNil(t, l1)
 
-	Reset(&LogOptions{Filename: "stderr", JSON: true}) //nolint:goconst
+	Reset(&LogOptions{Filename: "stderr", JSON: true})
 	l2 := Get()
 	assert.NotSame(t, l1, l2)
 }
