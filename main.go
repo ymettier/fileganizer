@@ -60,7 +60,7 @@ func run() (string, error) {
 // detectFileType reads the first bytes of a file and returns its MIME type.
 // The MIME type is normalized to the base type without parameters (e.g. "text/plain").
 func detectFileType(filename string) (string, error) {
-	f, err := os.Open(filepath.Clean(filename))
+	f, err := os.Open(filepath.Clean(filename)) //nolint:gosec // intentional user-provided input file
 	if err != nil {
 		return "", err
 	}
