@@ -127,9 +127,9 @@ Fileganizer is a Go CLI tool that processes documents through a pipeline: text e
 - `config.broken.mime.yaml` tests the "no extractor for MIME type" error path — `audio/wave` is deliberately unsupported and will never have a builtin extractor added
 - Unused testdata files must be removed
 - **Coverage requirements**:
-  - All packages: 100% statement coverage
-  - Exception: `testutil/` minimum 70% (error branches for unreachable system calls)
-  - Exception: `main` (root package) minimum 90% (end-to-end tests)
+    - All packages: 100% statement coverage
+    - Exception: `testutil/` minimum 86% (error branches for unreachable system calls)
+    - Exception: `main` (root package) minimum 90% (end-to-end tests)
 
 ## Common Tasks
 
