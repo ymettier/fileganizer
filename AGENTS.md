@@ -4,7 +4,7 @@
 Fileganizer is a Go CLI tool that processes documents through a pipeline: text extraction → grok pattern parsing → Go template rendering → optional shell command execution. Primary use case: renaming PDF invoices by extracting fields from their text content.
 
 ## Technology Stack
-- **Language**: Go 1.27+
+- **Language**: Go 1.26+ (minimum; prefer latest, e.g. 1.27.3)
 - **Configuration**: `github.com/knadh/koanf` (YAML parsing)
 - **CLI parsing**: `github.com/spf13/pflag`
 - **Grok patterns**: `github.com/logrusorgru/grokky`
