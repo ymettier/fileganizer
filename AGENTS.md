@@ -165,7 +165,7 @@ Fileganizer is a Go CLI tool that processes documents through a pipeline: text e
 
 ## Linting
 - Run: `golangci-lint run ./...`
-- Fallback (version mismatch): `docker run -t --rm -v $(pwd):/app:z -w /app golangci/golangci-lint:v2.13.2 golangci-lint run ./...`
+- Fallback (version mismatch): `docker run -t --rm -v $(pwd):/app:z -w /app golangci/golangci-lint:v2.15.0 golangci-lint run ./...`
 
 ## Version Management
 - Keep Go version consistent across `.github/workflows/*.yml`. Use `"1.27"` (resolves to latest patch) or `stable` for `actions/setup-go`.
