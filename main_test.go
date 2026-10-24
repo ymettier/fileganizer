@@ -1,4 +1,4 @@
-// Copyright 2023-2026 The Fileganizer Authors. All rights reserved.
+// Copyright 2024-2026 The Fileganizer Authors. All rights reserved.
 // SPDX-License-Identifier: MIT
 
 package main
@@ -22,6 +22,8 @@ func withArgs(t *testing.T, args ...string) {
 	t.Cleanup(func() { os.Args = oldArgs })
 }
 
+const invoiceOutput = "Invoice Summary\n  date: 2014-03-27\n  number: 001\n"
+
 func TestInvoiceAndTextExtraction(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -33,7 +35,7 @@ func TestInvoiceAndTextExtraction(t *testing.T) {
 		{
 			name:       "file invoice",
 			args:       []string{"-c", "testdata/config.invoice.yaml", "-f", "testdata/invoice.txt"},
-			wantSubstr: "Invoice Summary\n  date: 2014-03-27\n  number: 001\n",
+			wantSubstr: invoiceOutput,
 		},
 		{
 			name: "file invoice env",
@@ -46,12 +48,12 @@ func TestInvoiceAndTextExtraction(t *testing.T) {
 		{
 			name:       "file non matching pattern",
 			args:       []string{"-c", "testdata/config.invoice-nomatch.yaml", "-f", "testdata/invoice.txt"},
-			wantSubstr: "Invoice Summary\n  date: 2014-03-27\n  number: 001\n",
+			wantSubstr: invoiceOutput,
 		},
 		{
 			name:       "file broken template",
 			args:       []string{"-c", "testdata/config.broken.template.yaml", "-f", "testdata/invoice.txt"},
-			wantSubstr: "Invoice Summary\n  date: 2014-03-27\n  number: 001\n",
+			wantSubstr: invoiceOutput,
 		},
 		{
 			name:       "file run mode",
@@ -254,7 +256,7 @@ func TestExtractAndProcessEdgeCases(t *testing.T) {
 			runTest: func(t *testing.T) {
 				output, err := run()
 				assert.Nil(t, err)
-				assert.Contains(t, output, "Invoice Summary\n  date: 2014-03-27\n  number: 001\n")
+				assert.Contains(t, output, invoiceOutput)
 			},
 		},
 	}

@@ -16,6 +16,8 @@ const contents = "Some text\n" +
 	"Other identifier : x123\n" +
 	"Old date 1970 is the beginning of time\n"
 
+const patternIdentifierNumber = "Identifier : %{NUMBER:identifier}"
+
 var grokPatterns = map[string]string{
 	"NUMBER":              "[0-9]+",
 	"STRING":              "\\w+",
@@ -27,7 +29,7 @@ var grokPatterns = map[string]string{
 }
 
 var patternsMatching = []string{
-	"Identifier : %{NUMBER:identifier}",
+	patternIdentifierNumber,
 	"date %{YEAR:year} is",
 }
 
@@ -39,13 +41,13 @@ var patternsNotMatching = []string{
 
 func TestGrokOperations(t *testing.T) {
 	tests := []struct {
-		name      string
-		setup     func(t *testing.T) (Grok, error)
-		run       func(t *testing.T, g Grok)
+		name  string
+		setup func(*testing.T) (Grok, error)
+		run   func(*testing.T, Grok)
 	}{
 		{
 			name: "new",
-			setup: func(t *testing.T) (Grok, error) {
+			setup: func(*testing.T) (Grok, error) {
 				return New(grokPatterns)
 			},
 			run: func(t *testing.T, g Grok) {
@@ -54,7 +56,7 @@ func TestGrokOperations(t *testing.T) {
 		},
 		{
 			name: "parse all ok",
-			setup: func(t *testing.T) (Grok, error) {
+			setup: func(*testing.T) (Grok, error) {
 				return New(grokPatterns)
 			},
 			run: func(t *testing.T, g Grok) {
@@ -68,7 +70,7 @@ func TestGrokOperations(t *testing.T) {
 		},
 		{
 			name: "parse all nothing",
-			setup: func(t *testing.T) (Grok, error) {
+			setup: func(*testing.T) (Grok, error) {
 				return New(grokPatterns)
 			},
 			run: func(t *testing.T, g Grok) {
@@ -79,7 +81,7 @@ func TestGrokOperations(t *testing.T) {
 		},
 		{
 			name: "parse invalid compile",
-			setup: func(t *testing.T) (Grok, error) {
+			setup: func(*testing.T) (Grok, error) {
 				return New(grokPatterns)
 			},
 			run: func(t *testing.T, g Grok) {
@@ -90,12 +92,12 @@ func TestGrokOperations(t *testing.T) {
 		},
 		{
 			name: "parse all error mid chain",
-			setup: func(t *testing.T) (Grok, error) {
+			setup: func(*testing.T) (Grok, error) {
 				return New(grokPatterns)
 			},
 			run: func(t *testing.T, g Grok) {
 				patterns := []string{
-					"Identifier : %{NUMBER:identifier}",
+					patternIdentifierNumber,
 					"%{NONEXISTENT:bad}",
 				}
 				_, err := g.ParseAll(patterns, contents)
@@ -105,11 +107,11 @@ func TestGrokOperations(t *testing.T) {
 		},
 		{
 			name: "new invalid pattern registration",
-			setup: func(t *testing.T) (Grok, error) {
+			setup: func(*testing.T) (Grok, error) {
 				badPatterns := map[string]string{"": ""}
 				return New(badPatterns)
 			},
-			run: func(t *testing.T, g Grok) {
+			run: func(*testing.T, Grok) {
 			},
 		},
 	}
@@ -135,7 +137,7 @@ func TestParse(t *testing.T) {
 		wantLen int
 		wantErr bool
 	}{
-		{"identifier number ok", "Identifier : %{NUMBER:identifier}", 1, false},
+		{"identifier number ok", patternIdentifierNumber, 1, false},
 		{"other identifier ok", "Other identifier : %{STRING:identifier}", 1, false},
 		{"date year ok", "date %{YEAR:year} is", 1, false},
 		{"nothing number", "Nothing : %{NUMBER:identifier}", 0, false},

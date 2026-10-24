@@ -1,4 +1,4 @@
-// Copyright 2023-2026 The Fileganizer Authors. All rights reserved.
+// Copyright 2026 The Fileganizer Authors. All rights reserved.
 // SPDX-License-Identifier: MIT
 
 package pdftotext
@@ -655,6 +655,28 @@ func TestPDFTextExtract_CanceledContext(t *testing.T) {
 	_, err := PDFTextExtract(ctx, testdataDir+"/forged-invoice.pdf")
 	assert.Error(t, err)
 	assert.ErrorContains(t, err, "canceled")
+}
+
+type cancelOnLoopContext struct {
+	context.Context
+}
+
+func (c *cancelOnLoopContext) Err() error {
+	return context.Canceled
+}
+
+func TestPDFTextExtract_CanceledOnPageLoop(t *testing.T) {
+	conf := model.NewDefaultConfiguration()
+	f, err := os.Open(testdataDir + "/forged-invoice.pdf")
+	require.NoError(t, err)
+	defer f.Close()
+	pdfCtx, err := api.ReadValidateAndOptimize(context.Background(), f, conf, nil)
+	require.NoError(t, err)
+
+	ctx := &cancelOnLoopContext{Context: context.Background()}
+	_, err = extractPages(ctx, pdfCtx)
+	assert.Error(t, err)
+	assert.ErrorContains(t, err, "canceled on page 1")
 }
 
 func TestBuildFontCMaps_InvalidPage(t *testing.T) {

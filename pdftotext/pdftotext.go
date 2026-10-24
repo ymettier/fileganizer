@@ -801,6 +801,10 @@ func PDFTextExtract(ctx context.Context, filename string) (string, error) {
 		return "", err
 	}
 
+	return extractPages(ctx, pdfCtx)
+}
+
+func extractPages(ctx context.Context, pdfCtx *model.Context) (string, error) {
 	var text strings.Builder
 
 	for pageNr := 1; pageNr <= pdfCtx.PageCount; pageNr++ {

@@ -1,4 +1,4 @@
-// Copyright 2023-2026 The Fileganizer Authors. All rights reserved.
+// Copyright 2026 The Fileganizer Authors. All rights reserved.
 // SPDX-License-Identifier: MIT
 
 package testutil
@@ -7,51 +7,40 @@ import (
 	"errors"
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestUseTempDir(t *testing.T) {
 	originalDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	UseTempDir(t)
 
 	newDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
-	if newDir == originalDir {
-		t.Error("UseTempDir did not change the working directory")
-	}
+	assert.NotEqual(t, originalDir, newDir, "UseTempDir did not change the working directory")
 }
 
 func TestUseTempDir_RestoresOriginal(t *testing.T) {
 	originalDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	t.Run("sub", func(t *testing.T) {
 		UseTempDir(t)
 	})
 
 	restoredDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
-	if restoredDir != originalDir {
-		t.Errorf("working directory was not restored: got %q, want %q", restoredDir, originalDir)
-	}
+	assert.Equal(t, originalDir, restoredDir, "working directory was not restored")
 }
 
 func TestUseTempDir_CleanupLog(t *testing.T) {
 	originalDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	t.Run("sub", func(t *testing.T) {
 		UseTempDir(t)
@@ -60,22 +49,16 @@ func TestUseTempDir_CleanupLog(t *testing.T) {
 	})
 
 	restoredDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
-	if restoredDir != originalDir {
-		t.Errorf("working directory was not restored: got %q, want %q", restoredDir, originalDir)
-	}
+	assert.Equal(t, originalDir, restoredDir, "working directory was not restored")
 }
 
 func TestUseTempDir_GetwdError(t *testing.T) {
 	err := UseTempDirNoFatal(t, func() (string, error) {
 		return "", errors.New("getwd failed")
 	}, func(string) error { return nil })
-	if err == nil {
-		t.Error("expected error from getwd")
-	}
+	assert.Error(t, err, "expected error from getwd")
 }
 
 func TestUseTempDir_ChdirError(t *testing.T) {
@@ -84,9 +67,7 @@ func TestUseTempDir_ChdirError(t *testing.T) {
 	}, func(string) error {
 		return errors.New("chdir failed")
 	})
-	if err == nil {
-		t.Error("expected error from chdir")
-	}
+	assert.Error(t, err, "expected error from chdir")
 }
 
 func TestUseTempDir_CleanupChdirError(t *testing.T) {
@@ -102,9 +83,7 @@ func TestUseTempDir_CleanupChdirError(t *testing.T) {
 		}
 		return nil
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	// If we get here, the initial chdir succeeded and cleanup was registered
 	// The cleanup will run after this test returns and log the error
 }

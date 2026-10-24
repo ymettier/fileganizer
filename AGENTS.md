@@ -61,7 +61,8 @@ Fileganizer is a Go CLI tool that processes documents through a pipeline: text e
 - Use meaningful variable names
 - Use `gofmt` / `goimports` formatting. Max line length 140.
 - Group imports: stdlib first, third-party second, internal (`fileganizer/...`) last.
-- Flags (like `-c` or `-f`) are never constants. When the linter complains, add `//nolint`.
+### CLI Flag Constants Prohibition
+CLI flag strings (like `-c`, `-f`, `-t`, `-r`, `-V`) must **never** be extracted into constants. Flags are identifiers of a CLI contract, not reusable domain values. Hoisting them into constants obscures the flag-to-purpose mapping and is not DRY in any meaningful sense — each usage site already documents itself via the surrounding `FlagSet` registration or `New()` call. Instead, use the literal flag string directly at each call site. The `goconst` linter is configured to ignore flag patterns (see `exclusions` in `.golangci.yml`), so no `//nolint` comments are needed for flag strings. Line-scoped `//nolint` is still required for other constants that legitimately appear fewer than `min-occurrences` times.
 - No global or function-scoped `//nolint`. Only line-scoped `//nolint` is allowed.
 - Exception: `pdftotext/fontwidths_std.go` may use declaration-scoped `//nolint:gochecknoglobals,dupl` — the font metric data is inherently repetitive and the global map is intentional.
 - Keep the whole code simple and stupid (KISS). No over-engineering, no unnecessary abstractions.

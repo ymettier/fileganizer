@@ -87,13 +87,13 @@ func TestNewVersionFlag(t *testing.T) {
 
 func TestNewMissingRequiredFlags(t *testing.T) {
 	t.Run("missing config flag", func(t *testing.T) {
-		_, err := New("1.0", []string{"-f", "input.txt"}) //nolint:goconst
+		_, err := New("1.0", []string{"-f", "input.txt"})
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "--config/-c")
 	})
 
 	t.Run("missing file flag", func(t *testing.T) {
-		_, err := New("1.0", []string{"-c", "config.yaml"}) //nolint:goconst
+		_, err := New("1.0", []string{"-c", "config.yaml"})
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "--file/-f")
 	})
@@ -130,7 +130,7 @@ fileDescriptions:
 `
 	writeConfig(t, configContent)
 
-	cfg, err := New("1.0", []string{"-c", "test_config.yaml", "-f", "input.txt"}) //nolint:goconst
+	cfg, err := New("1.0", []string{"-c", "test_config.yaml", "-f", "input.txt"})
 	require.NoError(t, err)
 
 	assert.Equal(t, "input.txt", cfg.InputFile)

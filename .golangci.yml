@@ -47,6 +47,7 @@ linters:
     goconst:
       min-len: 2
       min-occurrences: 3
+      ignore-string-values: "^-c$|^-f$|^-t$|^-r$|^-V$|^input\\.txt$|^test_config\\.yaml$|^testdata/."
     gocritic:
       disabled-checks:
         - dupImport
