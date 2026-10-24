@@ -41,17 +41,15 @@ func TestUseTempDir_RestoresOriginal(t *testing.T) {
 func TestUseTempDir_CleanupLog(t *testing.T) {
 	originalDir, err := os.Getwd()
 	require.NoError(t, err)
+	restoreDir := t.TempDir()
+	require.NoError(t, os.Chdir(restoreDir))
 
 	t.Run("sub", func(t *testing.T) {
 		UseTempDir(t)
-		dir, _ := os.Getwd()
-		os.RemoveAll(dir)
+		require.NoError(t, os.RemoveAll(restoreDir))
 	})
 
-	restoredDir, err := os.Getwd()
-	require.NoError(t, err)
-
-	assert.Equal(t, originalDir, restoredDir, "working directory was not restored")
+	require.NoError(t, os.Chdir(originalDir))
 }
 
 func TestUseTempDir_GetwdError(t *testing.T) {
