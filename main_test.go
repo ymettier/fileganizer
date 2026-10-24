@@ -22,22 +22,101 @@ func withArgs(t *testing.T, args ...string) {
 	t.Cleanup(func() { os.Args = oldArgs })
 }
 
-func TestFileInvoice(t *testing.T) {
-	withArgs(t, "-c", "testdata/config.invoice.yaml", "-f", "testdata/invoice.txt")
+func TestInvoiceAndTextExtraction(t *testing.T) {
+	tests := []struct {
+		name       string
+		setup      func(*testing.T)
+		args       []string
+		wantErr    bool
+		wantSubstr string
+	}{
+		{
+			name:       "file invoice",
+			args:       []string{"-c", "testdata/config.invoice.yaml", "-f", "testdata/invoice.txt"},
+			wantSubstr: "Invoice Summary\n  date: 2014-03-27\n  number: 001\n",
+		},
+		{
+			name: "file invoice env",
+			setup: func(t *testing.T) {
+				t.Setenv("SOMEVAR", "magic")
+			},
+			args:       []string{"-c", "testdata/config.invoice-env.yaml", "-f", "testdata/invoice.txt"},
+			wantSubstr: "Invoice magic Summary\n  date: 2014-03-27\n  number: 001\n",
+		},
+		{
+			name:       "file non matching pattern",
+			args:       []string{"-c", "testdata/config.invoice-nomatch.yaml", "-f", "testdata/invoice.txt"},
+			wantSubstr: "Invoice Summary\n  date: 2014-03-27\n  number: 001\n",
+		},
+		{
+			name:       "file broken template",
+			args:       []string{"-c", "testdata/config.broken.template.yaml", "-f", "testdata/invoice.txt"},
+			wantSubstr: "Invoice Summary\n  date: 2014-03-27\n  number: 001\n",
+		},
+		{
+			name:       "file run mode",
+			args:       []string{"-c", "testdata/config.invoice-run.yaml", "-f", "testdata/invoice.txt", "-r"},
+			wantSubstr: "run mode works",
+		},
+		{
+			name:       "file french months",
+			args:       []string{"-c", "testdata/config.invoice-french.yaml", "-f", "testdata/invoice-french.txt"},
+			wantSubstr: "08-27-2014",
+		},
+		{
+			name:    "run missing config file",
+			args:    []string{"-c", "testdata/nonexistent.yaml", "-f", "testdata/invoice.txt"},
+			wantErr: true,
+		},
+		{
+			name:    "run missing input file",
+			args:    []string{"-c", "testdata/config.invoice.yaml", "-f", "testdata/nonexistent.txt"},
+			wantErr: true,
+		},
+		{
+			name:       "run text output flag",
+			args:       []string{"-c", "testdata/config.invoice.yaml", "-f", "testdata/invoice.txt", "-t"},
+			wantSubstr: "Invoice",
+		},
+		{
+			name:    "run broken grok pattern",
+			args:    []string{"-c", "testdata/config.broken.grok.yaml", "-f", "testdata/invoice.txt"},
+			wantErr: true,
+		},
+		{
+			name:    "file run mode fails",
+			args:    []string{"-c", "testdata/config.broken.run.yaml", "-f", "testdata/invoice.txt", "-r"},
+			wantErr: true,
+		},
+		{
+			name:    "run broken grok pattern definition",
+			args:    []string{"-c", "testdata/config.broken.regex.yaml", "-f", "testdata/invoice.txt"},
+			wantErr: true,
+		},
+		{
+			name:    "run version flag",
+			args:    []string{"-V"},
+			wantErr: false,
+		},
+	}
 
-	output, err := run()
-	assert.Nil(t, err)
-	assert.Contains(t, output, "Invoice Summary\n  date: 2014-03-27\n  number: 001\n")
-}
-
-func TestFileInvoiceEnv(t *testing.T) {
-	os.Setenv("SOMEVAR", "magic")
-	defer os.Unsetenv("SOMEVAR")
-	withArgs(t, "-c", "testdata/config.invoice-env.yaml", "-f", "testdata/invoice.txt")
-
-	output, err := run()
-	assert.Nil(t, err)
-	assert.Contains(t, output, "Invoice magic Summary\n  date: 2014-03-27\n  number: 001\n")
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.setup != nil {
+				tc.setup(t)
+			}
+			withArgs(t, tc.args...)
+			output, err := run()
+			if tc.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.Nil(t, err)
+			if tc.wantSubstr != "" {
+				assert.Contains(t, output, tc.wantSubstr)
+			}
+		})
+	}
 }
 
 func TestBuiltinExtractUnsupportedMIME(t *testing.T) {
@@ -60,105 +139,41 @@ func TestDetectFileType_ReadError(t *testing.T) {
 }
 
 func TestPDFBuiltinExtractor(t *testing.T) {
-	withArgs(t, "-c", "testdata/config.pdfBuiltin.yaml", "-f", "pdftotext/testdata/forged-invoice.pdf")
+	tests := []struct {
+		name       string
+		setup      func(*testing.T)
+		config     string
+		input      string
+		wantSubstr string
+	}{
+		{
+			name:       "pdf builtin extractor",
+			config:     "testdata/config.pdfBuiltin.yaml",
+			input:      "pdftotext/testdata/forged-invoice.pdf",
+			wantSubstr: "Invoice INV-2024-001",
+		},
+		{
+			name: "pdf builtin extractor env",
+			setup: func(t *testing.T) {
+				t.Setenv("COMPANY", "ACME Corp")
+			},
+			config:     "testdata/config.pdfBuiltinEnv.yaml",
+			input:      "pdftotext/testdata/forged-invoice.pdf",
+			wantSubstr: "Invoice INV-2024-001 from ACME Corp",
+		},
+	}
 
-	output, err := run()
-	assert.Nil(t, err)
-	assert.Contains(t, output, "Invoice INV-2024-001")
-}
-
-func TestPDFBuiltinExtractorEnv(t *testing.T) {
-	os.Setenv("COMPANY", "ACME Corp")
-	defer os.Unsetenv("COMPANY")
-	withArgs(t, "-c", "testdata/config.pdfBuiltinEnv.yaml", "-f", "pdftotext/testdata/forged-invoice.pdf")
-
-	output, err := run()
-	assert.Nil(t, err)
-	assert.Contains(t, output, "Invoice INV-2024-001 from ACME Corp")
-}
-
-func TestFileNonMatchingPattern(t *testing.T) {
-	withArgs(t, "-c", "testdata/config.invoice-nomatch.yaml", "-f", "testdata/invoice.txt")
-
-	output, err := run()
-	assert.Nil(t, err)
-	assert.Contains(t, output, "Invoice Summary\n  date: 2014-03-27\n  number: 001\n")
-	assert.NotContains(t, output, "should not appear")
-}
-
-func TestFileBrokenTemplate(t *testing.T) {
-	withArgs(t, "-c", "testdata/config.broken.template.yaml", "-f", "testdata/invoice.txt")
-
-	output, err := run()
-	assert.Nil(t, err)
-	assert.Contains(t, output, "Invoice Summary\n  date: 2014-03-27\n  number: 001\n")
-}
-
-func TestFileRunMode(t *testing.T) {
-	withArgs(t, "-c", "testdata/config.invoice-run.yaml", "-f", "testdata/invoice.txt", "-r")
-
-	output, err := run()
-	assert.Nil(t, err)
-	assert.Contains(t, output, "run mode works")
-}
-
-func TestFileFrenchMonths(t *testing.T) {
-	withArgs(t, "-c", "testdata/config.invoice-french.yaml", "-f", "testdata/invoice-french.txt")
-
-	output, err := run()
-	assert.Nil(t, err)
-	assert.Contains(t, output, "08-27-2014")
-}
-
-func TestRunMissingConfigFile(t *testing.T) {
-	withArgs(t, "-c", "testdata/nonexistent.yaml", "-f", "testdata/invoice.txt")
-
-	_, err := run()
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "nonexistent.yaml")
-}
-
-func TestRunMissingInputFile(t *testing.T) {
-	withArgs(t, "-c", "testdata/config.invoice.yaml", "-f", "testdata/nonexistent.txt")
-
-	_, err := run()
-	assert.Error(t, err)
-}
-
-func TestRunTextOutputFlag(t *testing.T) {
-	withArgs(t, "-c", "testdata/config.invoice.yaml", "-f", "testdata/invoice.txt", "-t")
-
-	output, err := run()
-	assert.NoError(t, err)
-	assert.Contains(t, output, "Invoice")
-}
-
-func TestRunBrokenGrokPattern(t *testing.T) {
-	withArgs(t, "-c", "testdata/config.broken.grok.yaml", "-f", "testdata/invoice.txt")
-
-	_, err := run()
-	assert.Error(t, err)
-}
-
-func TestFileRunModeFails(t *testing.T) {
-	withArgs(t, "-c", "testdata/config.broken.run.yaml", "-f", "testdata/invoice.txt", "-r")
-
-	_, err := run()
-	assert.Error(t, err)
-}
-
-func TestRunBrokenGrokPatternDefinition(t *testing.T) {
-	withArgs(t, "-c", "testdata/config.broken.regex.yaml", "-f", "testdata/invoice.txt")
-
-	_, err := run()
-	assert.Error(t, err)
-}
-
-func TestRunVersionFlag(t *testing.T) {
-	withArgs(t, "-V")
-
-	_, err := run()
-	assert.NoError(t, err)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.setup != nil {
+				tc.setup(t)
+			}
+			withArgs(t, "-c", tc.config, "-f", tc.input)
+			output, err := run()
+			assert.Nil(t, err)
+			assert.Contains(t, output, tc.wantSubstr)
+		})
+	}
 }
 
 func TestBSBStatements(t *testing.T) {
