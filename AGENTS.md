@@ -4,7 +4,7 @@
 Fileganizer is a Go CLI tool that processes documents through a pipeline: text extraction → grok pattern parsing → Go template rendering → optional shell command execution. Primary use case: renaming PDF invoices by extracting fields from their text content.
 
 ## Technology Stack
-- **Language**: Go 1.26+
+- **Language**: Go 1.26+ (minimum; prefer latest, e.g. 1.27.3)
 - **Configuration**: `github.com/knadh/koanf` (YAML parsing)
 - **CLI parsing**: `github.com/spf13/pflag`
 - **Grok patterns**: `github.com/logrusorgru/grokky`
@@ -61,7 +61,8 @@ Fileganizer is a Go CLI tool that processes documents through a pipeline: text e
 - Use meaningful variable names
 - Use `gofmt` / `goimports` formatting. Max line length 140.
 - Group imports: stdlib first, third-party second, internal (`fileganizer/...`) last.
-- Flags (like `-c` or `-f`) are never constants. When the linter complains, add `//nolint`.
+### CLI Flag Constants Prohibition
+CLI flag strings (like `-c`, `-f`, `-t`, `-r`, `-V`) must **never** be extracted into constants. Flags are identifiers of a CLI contract, not reusable domain values. Hoisting them into constants obscures the flag-to-purpose mapping and is not DRY in any meaningful sense — each usage site already documents itself via the surrounding `FlagSet` registration or `New()` call. Instead, use the literal flag string directly at each call site. The `goconst` linter is configured to ignore flag patterns (see `exclusions` in `.golangci.yml`), so no `//nolint` comments are needed for flag strings. Line-scoped `//nolint` is still required for other constants that legitimately appear fewer than `min-occurrences` times.
 - No global or function-scoped `//nolint`. Only line-scoped `//nolint` is allowed.
 - Exception: `pdftotext/fontwidths_std.go` may use declaration-scoped `//nolint:gochecknoglobals,dupl` — the font metric data is inherently repetitive and the global map is intentional.
 - Keep the whole code simple and stupid (KISS). No over-engineering, no unnecessary abstractions.
@@ -127,9 +128,9 @@ Fileganizer is a Go CLI tool that processes documents through a pipeline: text e
 - `config.broken.mime.yaml` tests the "no extractor for MIME type" error path — `audio/wave` is deliberately unsupported and will never have a builtin extractor added
 - Unused testdata files must be removed
 - **Coverage requirements**:
-  - All packages: 100% statement coverage
-  - Exception: `testutil/` minimum 70% (error branches for unreachable system calls)
-  - Exception: `main` (root package) minimum 90% (end-to-end tests)
+    - All packages: 100% statement coverage
+    - Exception: `testutil/` minimum 86% (error branches for unreachable system calls)
+    - Exception: `main` (root package) minimum 90% (end-to-end tests)
 
 ## Common Tasks
 
@@ -165,7 +166,12 @@ Fileganizer is a Go CLI tool that processes documents through a pipeline: text e
 
 ## Linting
 - Run: `golangci-lint run ./...`
-- Fallback (version mismatch): `docker run -t --rm -v $(pwd):/app:z -w /app golangci/golangci-lint:v2.13.2 golangci-lint run ./...`
+- Write tests alongside features in `*_test.go` files
+- All Go test files (`*_test.go`) must use testify for assertions
+- Use testify assertions (`assert.Equal`, `assert.Nil`, `assert.FileExists`)
+- Prefer table-driven tests (lists of test cases) over repetitive individual test functions when the same logic is exercised with different inputs or expected outcomes
+- Tests should be isolated and use temporary files/directories
+- Fallback (version mismatch): `docker run -t --rm -v $(pwd):/app:z -w /app golangci/golangci-lint:v2.15.0 golangci-lint run ./...`
 
 ## Version Management
 - Keep Go version consistent across `.github/workflows/*.yml`. Use `"1.27"` (resolves to latest patch) or `stable` for `actions/setup-go`.

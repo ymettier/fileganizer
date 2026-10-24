@@ -16,6 +16,8 @@ const contents = "Some text\n" +
 	"Other identifier : x123\n" +
 	"Old date 1970 is the beginning of time\n"
 
+const patternIdentifierNumber = "Identifier : %{NUMBER:identifier}"
+
 var grokPatterns = map[string]string{
 	"NUMBER":              "[0-9]+",
 	"STRING":              "\\w+",
@@ -27,7 +29,7 @@ var grokPatterns = map[string]string{
 }
 
 var patternsMatching = []string{
-	"Identifier : %{NUMBER:identifier}",
+	patternIdentifierNumber,
 	"date %{YEAR:year} is",
 }
 
@@ -37,79 +39,124 @@ var patternsNotMatching = []string{
 	"identifier : %{YEAR:year}",
 }
 
-func TestNew(t *testing.T) {
-	g, err := New(grokPatterns)
-	assert.NoError(t, err)
-	assert.Equal(t, len(grokPatterns), len(g.host))
-}
+func TestGrokOperations(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(*testing.T) (Grok, error)
+		run   func(*testing.T, Grok)
+	}{
+		{
+			name: "new",
+			setup: func(*testing.T) (Grok, error) {
+				return New(grokPatterns)
+			},
+			run: func(t *testing.T, g Grok) {
+				assert.Equal(t, len(grokPatterns), len(g.host))
+			},
+		},
+		{
+			name: "parse all ok",
+			setup: func(*testing.T) (Grok, error) {
+				return New(grokPatterns)
+			},
+			run: func(t *testing.T, g Grok) {
+				r, err := g.ParseAll(patternsMatching, contents)
+				assert.NoError(t, err)
+				assert.Contains(t, r, "identifier")
+				assert.Equal(t, r["identifier"], "123")
+				assert.Contains(t, r, "year")
+				assert.Equal(t, r["year"], "1970")
+			},
+		},
+		{
+			name: "parse all nothing",
+			setup: func(*testing.T) (Grok, error) {
+				return New(grokPatterns)
+			},
+			run: func(t *testing.T, g Grok) {
+				r, err := g.ParseAll(patternsNotMatching, contents)
+				assert.NoError(t, err)
+				assert.Len(t, r, 0)
+			},
+		},
+		{
+			name: "parse invalid compile",
+			setup: func(*testing.T) (Grok, error) {
+				return New(grokPatterns)
+			},
+			run: func(t *testing.T, g Grok) {
+				_, err := g.Parse("%{NONEXISTENT:bad}", contents)
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), "NONEXISTENT")
+			},
+		},
+		{
+			name: "parse all error mid chain",
+			setup: func(*testing.T) (Grok, error) {
+				return New(grokPatterns)
+			},
+			run: func(t *testing.T, g Grok) {
+				patterns := []string{
+					patternIdentifierNumber,
+					"%{NONEXISTENT:bad}",
+				}
+				_, err := g.ParseAll(patterns, contents)
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), "NONEXISTENT")
+			},
+		},
+		{
+			name: "new invalid pattern registration",
+			setup: func(*testing.T) (Grok, error) {
+				badPatterns := map[string]string{"": ""}
+				return New(badPatterns)
+			},
+			run: func(*testing.T, Grok) {
+			},
+		},
+	}
 
-func TestParseOK(t *testing.T) {
-	g, err := New(grokPatterns)
-	require.NoError(t, err)
-
-	for _, p := range patternsMatching {
-		r, err := g.Parse(p, contents)
-		assert.NoErrorf(t, err, "Fails on pattern '%s' with error %v", p, err)
-		assert.Lenf(t, r, 1, "Fails on pattern '%s'", p)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			g, err := tc.setup(t)
+			if tc.name == "new invalid pattern registration" {
+				assert.Error(t, err)
+				tc.run(t, g)
+				return
+			}
+			require.NoError(t, err)
+			tc.run(t, g)
+		})
 	}
 }
 
-func TestParseNothing(t *testing.T) {
-	g, err := New(grokPatterns)
-	require.NoError(t, err)
-	for _, p := range patternsNotMatching {
-		r, err := g.Parse(p, contents)
-		assert.NoErrorf(t, err, "Fails on pattern '%s' with error %v", p, err)
-		assert.Lenf(t, r, 0, "Fails on pattern '%s'", p)
+func TestParse(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern string
+		wantLen int
+		wantErr bool
+	}{
+		{"identifier number ok", patternIdentifierNumber, 1, false},
+		{"other identifier ok", "Other identifier : %{STRING:identifier}", 1, false},
+		{"date year ok", "date %{YEAR:year} is", 1, false},
+		{"nothing number", "Nothing : %{NUMBER:identifier}", 0, false},
+		{"identifier string case sensitive", "identifier : %{NUMBER:identifier}", 0, false},
+		{"identifier year", "identifier : %{YEAR:year}", 0, false},
 	}
-}
 
-func TestParseAllOK(t *testing.T) {
 	g, err := New(grokPatterns)
 	require.NoError(t, err)
 
-	r, err := g.ParseAll(patternsMatching, contents)
-	assert.NoError(t, err)
-	assert.Contains(t, r, "identifier")
-	assert.Equal(t, r["identifier"], "123")
-	assert.Contains(t, r, "year")
-	assert.Equal(t, r["year"], "1970")
-}
-
-func TestParseAllNothing(t *testing.T) {
-	g, err := New(grokPatterns)
-	require.NoError(t, err)
-
-	r, err := g.ParseAll(patternsNotMatching, contents)
-	assert.NoError(t, err)
-	assert.Len(t, r, 0)
-}
-
-func TestNew_InvalidPatternRegistration(t *testing.T) {
-	badPatterns := map[string]string{"": ""}
-	_, err := New(badPatterns)
-	assert.Error(t, err)
-}
-
-func TestParse_InvalidCompile(t *testing.T) {
-	g, err := New(grokPatterns)
-	require.NoError(t, err)
-
-	_, err = g.Parse("%{NONEXISTENT:bad}", contents)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "NONEXISTENT")
-}
-
-func TestParseAll_ErrorMidChain(t *testing.T) {
-	g, err := New(grokPatterns)
-	require.NoError(t, err)
-
-	// First pattern matches, second fails
-	patterns := []string{
-		"Identifier : %{NUMBER:identifier}",
-		"%{NONEXISTENT:bad}",
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r, err := g.Parse(tc.pattern, contents)
+			if tc.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Len(t, r, tc.wantLen)
+		})
 	}
-	_, err = g.ParseAll(patterns, contents)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "NONEXISTENT")
 }

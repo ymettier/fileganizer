@@ -796,11 +796,15 @@ func PDFTextExtract(ctx context.Context, filename string) (string, error) {
 
 	conf := model.NewDefaultConfiguration()
 
-	pdfCtx, err := api.ReadValidateAndOptimize(f, conf)
+	pdfCtx, err := api.ReadValidateAndOptimize(ctx, f, conf, nil)
 	if err != nil {
 		return "", err
 	}
 
+	return extractPages(ctx, pdfCtx)
+}
+
+func extractPages(ctx context.Context, pdfCtx *model.Context) (string, error) {
 	var text strings.Builder
 
 	for pageNr := 1; pageNr <= pdfCtx.PageCount; pageNr++ {
@@ -808,7 +812,7 @@ func PDFTextExtract(ctx context.Context, filename string) (string, error) {
 			return "", fmt.Errorf("canceled on page %d: %w", pageNr, err)
 		}
 
-		r, _ := pdfcpu.ExtractPageContent(pdfCtx, pageNr)
+		r, _ := pdfcpu.ExtractPageContent(ctx, pdfCtx, pageNr)
 
 		data, _ := io.ReadAll(r)
 
@@ -980,7 +984,7 @@ func resolveToUnicode(ctx *model.Context, obj types.Object) map[uint16]rune {
 	if err != nil || sd == nil {
 		return nil
 	}
-	if err := sd.Decode(); err != nil {
+	if err := sd.DecodeWithLimit(ctx.DecodeLimit()); err != nil {
 		return nil
 	}
 

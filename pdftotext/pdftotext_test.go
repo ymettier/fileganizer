@@ -1,4 +1,4 @@
-// Copyright 2023-2026 The Fileganizer Authors. All rights reserved.
+// Copyright 2026 The Fileganizer Authors. All rights reserved.
 // SPDX-License-Identifier: MIT
 
 package pdftotext
@@ -539,7 +539,7 @@ func TestBuildFontCMaps_MissingFontObject(t *testing.T) {
 	f, err := os.Open(testdataDir + "/forged-invoice.pdf")
 	require.NoError(t, err)
 	defer f.Close()
-	pdfCtx, err := api.ReadValidateAndOptimize(f, conf)
+	pdfCtx, err := api.ReadValidateAndOptimize(context.Background(), f, conf, nil)
 	require.NoError(t, err)
 
 	pdfCtx.Optimize.PageFonts[0][9999] = true
@@ -552,7 +552,7 @@ func TestResolveToUnicode_NonIndirectRef(t *testing.T) {
 	f, err := os.Open(testdataDir + "/forged-invoice.pdf")
 	require.NoError(t, err)
 	defer f.Close()
-	pdfCtx, err := api.ReadValidateAndOptimize(f, conf)
+	pdfCtx, err := api.ReadValidateAndOptimize(context.Background(), f, conf, nil)
 	require.NoError(t, err)
 
 	m := resolveToUnicode(pdfCtx, types.Integer(0))
@@ -564,7 +564,7 @@ func TestCidToUnicode_DescendantFontsMissing(t *testing.T) {
 	f, err := os.Open(testdataDir + "/forged-invoice.pdf")
 	require.NoError(t, err)
 	defer f.Close()
-	pdfCtx, err := api.ReadValidateAndOptimize(f, conf)
+	pdfCtx, err := api.ReadValidateAndOptimize(context.Background(), f, conf, nil)
 	require.NoError(t, err)
 
 	// forged-invoice.pdf uses F1/F2 simple fonts - no ToUnicode and no DescendantFonts
@@ -580,7 +580,7 @@ func TestCidToUnicode_DescendantFontsBogusRef(t *testing.T) {
 	f, err := os.Open(testdataDir + "/forged-invoice.pdf")
 	require.NoError(t, err)
 	defer f.Close()
-	pdfCtx, err := api.ReadValidateAndOptimize(f, conf)
+	pdfCtx, err := api.ReadValidateAndOptimize(context.Background(), f, conf, nil)
 	require.NoError(t, err)
 
 	fd := types.Dict{
@@ -597,7 +597,7 @@ func TestCidToUnicode_DescendantFontsEmptyArray(t *testing.T) {
 	f, err := os.Open(testdataDir + "/forged-invoice.pdf")
 	require.NoError(t, err)
 	defer f.Close()
-	pdfCtx, err := api.ReadValidateAndOptimize(f, conf)
+	pdfCtx, err := api.ReadValidateAndOptimize(context.Background(), f, conf, nil)
 	require.NoError(t, err)
 
 	fd := types.Dict{
@@ -612,7 +612,7 @@ func TestCidToUnicode_DescendantFontsNonIndirectRef(t *testing.T) {
 	f, err := os.Open(testdataDir + "/forged-invoice.pdf")
 	require.NoError(t, err)
 	defer f.Close()
-	pdfCtx, err := api.ReadValidateAndOptimize(f, conf)
+	pdfCtx, err := api.ReadValidateAndOptimize(context.Background(), f, conf, nil)
 	require.NoError(t, err)
 
 	fd := types.Dict{
@@ -629,7 +629,7 @@ func TestResolveToUnicode_DerefError(t *testing.T) {
 	f, err := os.Open(testdataDir + "/forged-invoice.pdf")
 	require.NoError(t, err)
 	defer f.Close()
-	pdfCtx, err := api.ReadValidateAndOptimize(f, conf)
+	pdfCtx, err := api.ReadValidateAndOptimize(context.Background(), f, conf, nil)
 	require.NoError(t, err)
 
 	m := resolveToUnicode(pdfCtx, types.IndirectRef{ObjectNumber: 99999, GenerationNumber: 0})
@@ -641,7 +641,7 @@ func TestResolveToUnicode_ToNonStreamDict(t *testing.T) {
 	f, err := os.Open(testdataDir + "/forged-invoice.pdf")
 	require.NoError(t, err)
 	defer f.Close()
-	pdfCtx, err := api.ReadValidateAndOptimize(f, conf)
+	pdfCtx, err := api.ReadValidateAndOptimize(context.Background(), f, conf, nil)
 	require.NoError(t, err)
 
 	// Point ToUnicode to object 3 (a font dict, not a stream)
@@ -657,12 +657,34 @@ func TestPDFTextExtract_CanceledContext(t *testing.T) {
 	assert.ErrorContains(t, err, "canceled")
 }
 
+type cancelOnLoopContext struct {
+	context.Context
+}
+
+func (c *cancelOnLoopContext) Err() error {
+	return context.Canceled
+}
+
+func TestPDFTextExtract_CanceledOnPageLoop(t *testing.T) {
+	conf := model.NewDefaultConfiguration()
+	f, err := os.Open(testdataDir + "/forged-invoice.pdf")
+	require.NoError(t, err)
+	defer f.Close()
+	pdfCtx, err := api.ReadValidateAndOptimize(context.Background(), f, conf, nil)
+	require.NoError(t, err)
+
+	ctx := &cancelOnLoopContext{Context: context.Background()}
+	_, err = extractPages(ctx, pdfCtx)
+	assert.Error(t, err)
+	assert.ErrorContains(t, err, "canceled on page 1")
+}
+
 func TestBuildFontCMaps_InvalidPage(t *testing.T) {
 	conf := model.NewDefaultConfiguration()
 	f, err := os.Open(testdataDir + "/forged-invoice.pdf")
 	require.NoError(t, err)
 	defer f.Close()
-	pdfCtx, err := api.ReadValidateAndOptimize(f, conf)
+	pdfCtx, err := api.ReadValidateAndOptimize(context.Background(), f, conf, nil)
 	require.NoError(t, err)
 
 	t.Run("page 0", func(t *testing.T) {
@@ -681,7 +703,7 @@ func TestCidToUnicode_DescendantWithToUnicode(t *testing.T) {
 	f, err := os.Open(testdataDir + "/bsb-002-statement.pdf")
 	require.NoError(t, err)
 	defer f.Close()
-	pdfCtx, err := api.ReadValidateAndOptimize(f, conf)
+	pdfCtx, err := api.ReadValidateAndOptimize(context.Background(), f, conf, nil)
 	require.NoError(t, err)
 
 	t.Run("descendant without ToUnicode returns nil", func(t *testing.T) {
@@ -725,7 +747,7 @@ func TestResolveToUnicode_DecodeCorruptedStream(t *testing.T) {
 	f, err := os.Open(testdataDir + "/bsb-002-statement.pdf")
 	require.NoError(t, err)
 	defer f.Close()
-	pdfCtx, err := api.ReadValidateAndOptimize(f, conf)
+	pdfCtx, err := api.ReadValidateAndOptimize(context.Background(), f, conf, nil)
 	require.NoError(t, err)
 
 	// Object 35 is the ToUnicode stream for font 11
@@ -802,7 +824,7 @@ func TestBuildFontWidths_InvalidPage(t *testing.T) {
 	f, err := os.Open(testdataDir + "/forged-invoice.pdf")
 	require.NoError(t, err)
 	defer f.Close()
-	pdfCtx, err := api.ReadValidateAndOptimize(f, conf)
+	pdfCtx, err := api.ReadValidateAndOptimize(context.Background(), f, conf, nil)
 	require.NoError(t, err)
 
 	assert.Empty(t, buildFontWidths(pdfCtx, 0))
@@ -814,7 +836,7 @@ func TestBuildFontWidths_MissingFontObject(t *testing.T) {
 	f, err := os.Open(testdataDir + "/forged-invoice.pdf")
 	require.NoError(t, err)
 	defer f.Close()
-	pdfCtx, err := api.ReadValidateAndOptimize(f, conf)
+	pdfCtx, err := api.ReadValidateAndOptimize(context.Background(), f, conf, nil)
 	require.NoError(t, err)
 
 	pdfCtx.Optimize.PageFonts[0][9999] = true
