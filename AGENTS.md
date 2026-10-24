@@ -4,7 +4,7 @@
 Fileganizer is a Go CLI tool that processes documents through a pipeline: text extraction → grok pattern parsing → Go template rendering → optional shell command execution. Primary use case: renaming PDF invoices by extracting fields from their text content.
 
 ## Technology Stack
-- **Language**: Go 1.26+
+- **Language**: Go 1.27+
 - **Configuration**: `github.com/knadh/koanf` (YAML parsing)
 - **CLI parsing**: `github.com/spf13/pflag`
 - **Grok patterns**: `github.com/logrusorgru/grokky`
@@ -165,6 +165,11 @@ Fileganizer is a Go CLI tool that processes documents through a pipeline: text e
 
 ## Linting
 - Run: `golangci-lint run ./...`
+- Write tests alongside features in `*_test.go` files
+- All Go test files (`*_test.go`) must use testify for assertions
+- Use testify assertions (`assert.Equal`, `assert.Nil`, `assert.FileExists`)
+- Prefer table-driven tests (lists of test cases) over repetitive individual test functions when the same logic is exercised with different inputs or expected outcomes
+- Tests should be isolated and use temporary files/directories
 - Fallback (version mismatch): `docker run -t --rm -v $(pwd):/app:z -w /app golangci/golangci-lint:v2.15.0 golangci-lint run ./...`
 
 ## Version Management
