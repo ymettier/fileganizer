@@ -200,38 +200,71 @@ func TestBSBStatements(t *testing.T) {
 	}
 }
 
-func TestExtractTextMimeNotInConfig(t *testing.T) {
-	withArgs(t, "-c", "testdata/config.broken.mime.yaml", "-f", "testdata/invoice.txt")
-
-	_, err := run()
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "no textExtractor configured for MIME type")
-}
-
-func TestProcessFileDescriptionsNoMatch(t *testing.T) {
-	withArgs(t, "-c", "testdata/config.nomatch.yaml", "-f", "testdata/invoice.txt")
-
-	output, err := run()
-	assert.Nil(t, err)
-	assert.Empty(t, output)
-}
-
-func TestExtractTextUnsupportedType(t *testing.T) {
-	cfg := config.Config{
-		InputFile: "testdata/invoice.txt",
-		TextExtractors: map[string]config.TextExtractorConfig{
-			"text/plain": {Type: "bogus"},
+func TestExtractAndProcessEdgeCases(t *testing.T) {
+	tests := []struct {
+		name       string
+		setup      func(t *testing.T)
+		runTest    func(t *testing.T)
+		wantErr    bool
+		wantSubstr string
+		errSubstr  string
+		emptyOut   bool
+	}{
+		{
+			name: "mime not in config",
+			setup: func(t *testing.T) {
+				withArgs(t, "-c", "testdata/config.broken.mime.yaml", "-f", "testdata/invoice.txt")
+			},
+			runTest: func(t *testing.T) {
+				_, err := run()
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), "no textExtractor configured for MIME type")
+			},
+		},
+		{
+			name: "process file descriptions no match",
+			setup: func(t *testing.T) {
+				withArgs(t, "-c", "testdata/config.nomatch.yaml", "-f", "testdata/invoice.txt")
+			},
+			runTest: func(t *testing.T) {
+				output, err := run()
+				assert.Nil(t, err)
+				assert.Empty(t, output)
+			},
+		},
+		{
+			name: "extract text unsupported type",
+			runTest: func(t *testing.T) {
+				cfg := config.Config{
+					InputFile: "testdata/invoice.txt",
+					TextExtractors: map[string]config.TextExtractorConfig{
+						"text/plain": {Type: "bogus"},
+					},
+				}
+				_, err := extractText(context.Background(), &cfg)
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), "unsupported textExtractor type")
+			},
+		},
+		{
+			name: "file invoice with cat command",
+			setup: func(t *testing.T) {
+				withArgs(t, "-c", "testdata/config.invoice-cat.yaml", "-f", "testdata/invoice.txt")
+			},
+			runTest: func(t *testing.T) {
+				output, err := run()
+				assert.Nil(t, err)
+				assert.Contains(t, output, "Invoice Summary\n  date: 2014-03-27\n  number: 001\n")
+			},
 		},
 	}
-	_, err := extractText(context.Background(), &cfg)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unsupported textExtractor type")
-}
 
-func TestFileInvoiceWithCatCommand(t *testing.T) {
-	withArgs(t, "-c", "testdata/config.invoice-cat.yaml", "-f", "testdata/invoice.txt")
-
-	output, err := run()
-	assert.Nil(t, err)
-	assert.Contains(t, output, "Invoice Summary\n  date: 2014-03-27\n  number: 001\n")
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.setup != nil {
+				tc.setup(t)
+			}
+			tc.runTest(t)
+		})
+	}
 }
